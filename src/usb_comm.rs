@@ -1,7 +1,7 @@
 
 use defmt::info;
-use embassy_stm32::usb_otg::{Driver, Instance};
-use embassy_stm32::{bind_interrupts, peripherals, usb_otg, Config};
+use embassy_stm32::usb_otg::Driver;
+use embassy_stm32::{bind_interrupts, peripherals, usb_otg};
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
@@ -11,8 +11,7 @@ use embassy_usb::UsbDevice;
 use embassy_futures::join::join;
 use static_cell::make_static;
 
-
-struct Disconnected {}
+struct Disconnected;
 
 impl From<EndpointError> for Disconnected {
     fn from(val: EndpointError) -> Self {
@@ -23,20 +22,17 @@ impl From<EndpointError> for Disconnected {
     }
 }
 
-
 type MyDriver = Driver<'static, USB_OTG_FS>;
 type MyUsb = UsbDevice<'static, MyDriver>;
 type MyClass = CdcAcmClass<'static, MyDriver>;
-//type DevUsb<'d> = UsbDevice<'d, Driver<'d, USB_OTG_FS>>;
-//type DevClass<'d> = CdcAcmClass<'d, Driver<'d, USB_OTG_FS>>;
 
-struct UsbProtocol {
-}
+struct UsbProtocol;
 
 impl UsbProtocol {
     /// Connection spawner / manager.
     async fn connector(class: &mut MyClass) -> ! {
         loop {
+            info!("Awaiting connection in the connector");
             class.wait_connection().await;
             info!("Connected");
             let _ = UsbProtocol::echo(class).await;
@@ -56,9 +52,8 @@ impl UsbProtocol {
     }
 }
 
+/// Device initialization.
 pub struct UsbSerial {
-    // usb: UsbDevice<'d, Driver<'d, USB_OTG_FS>>,
-    // class: CdcAcmClass<'d, Driver<'d, USB_OTG_FS>>
     usb: MyUsb,
     class: MyClass,
 }
@@ -71,19 +66,22 @@ impl UsbSerial {
     pub fn new(usb_peripheral: USB_OTG_FS,
                dp: PA12,
                dm: PA11) -> Self {
-        // pub fn new(sth: (), pina) -> Self {
+        // TODO: Maybe pull dp down for reenumeration on flash?
+
         // Create the driver, from the HAL.
-        let mut ep_out_buffer = make_static!([0u8; 256]);
+        let ep_out_buffer = make_static!([0u8; 256]);
         let mut config = embassy_stm32::usb_otg::Config::default();
-        config.vbus_detection = true;
+
+        // Setting to true requires additional connection to specific PIN
+        config.vbus_detection = false;
+
         let driver = Driver::new_fs(usb_peripheral, Irqs, dp, dm,
                                     ep_out_buffer, config);
-        // let driver = Driver::new_fs(p.USB_OTG_FS, Irqs, p.PA12, p.PA11, &mut ep_out_buffer, config);
 
         // Create embassy-usb Config
         let mut config = embassy_usb::Config::new(0xd10d, 0x10de);
-        config.manufacturer = Some("Alpk");
-        config.product = Some("USB-USB communication diode");
+        config.manufacturer = Some("bla");
+        config.product = Some("USB->USB communication diode");
         config.serial_number = Some("0000001");
 
         // Required for windows compatibility.
@@ -117,17 +115,18 @@ impl UsbSerial {
         // Build the builder.
         let usb = builder.build();
 
-        // Run the USB device.
         Self {
             usb,
             class,
         }
     }
+}
 
-    pub async fn run_loop(&mut self) {
-        let usb = self.usb.run();
-        let connector_future = UsbProtocol::connector(&mut self.class);
+#[embassy_executor::task]
+pub async fn run_usb(mut serial: UsbSerial) {
+    let usb = serial.usb.run();
+    let connector_future = UsbProtocol::connector(&mut serial.class);
 
-        join(usb, connector_future).await;
-    }
+    info!("Started USB");
+    join(usb, connector_future).await;
 }
