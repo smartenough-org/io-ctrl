@@ -10,6 +10,7 @@ use embassy_stm32::peripherals::{PA12, PA11};
 use embassy_usb::UsbDevice;
 use embassy_futures::join::join;
 use static_cell::make_static;
+use crate::status::{Status, Message};
 
 struct Disconnected;
 
@@ -26,25 +27,37 @@ type MyDriver = Driver<'static, USB_OTG_FS>;
 type MyUsb = UsbDevice<'static, MyDriver>;
 type MyClass = CdcAcmClass<'static, MyDriver>;
 
-struct UsbProtocol;
+struct UsbProtocol {
+    status: &'static Status
+}
 
 impl UsbProtocol {
+    fn new(status: &'static Status) -> Self {
+        Self {
+            status
+        }
+    }
+
     /// Connection spawner / manager.
-    async fn connector(class: &mut MyClass) -> ! {
+    async fn connector(&self, class: &mut MyClass) -> ! {
         loop {
             info!("Awaiting connection in the connector");
             class.wait_connection().await;
             info!("Connected");
-            let _ = UsbProtocol::echo(class).await;
+            self.status.set_state(Message::Attention, 2).await;
+            let _ = self.echo(class).await;
             info!("Disconnected");
+            self.status.set_state(Message::Attention, 1).await;
         }
     }
 
     /// Connection handler
-    async fn echo(class: &mut MyClass) -> Result<(), Disconnected> {
+    async fn echo(&self, class: &mut MyClass) -> Result<(), Disconnected> {
         let mut buf = [0; 64];
         loop {
             let n = class.read_packet(&mut buf).await?;
+            /* Maybe less often? */
+            self.status.try_set_state(Message::Transfer, 1);
             let data = &buf[..n];
             info!("data: {:x}", data);
             class.write_packet(data).await?;
@@ -56,6 +69,7 @@ impl UsbProtocol {
 pub struct UsbSerial {
     usb: MyUsb,
     class: MyClass,
+    status: &'static Status,
 }
 
 bind_interrupts!(struct Irqs {
@@ -63,7 +77,8 @@ bind_interrupts!(struct Irqs {
 });
 
 impl UsbSerial {
-    pub fn new(usb_peripheral: USB_OTG_FS,
+    pub fn new(status: &'static Status,
+               usb_peripheral: USB_OTG_FS,
                dp: PA12,
                dm: PA11) -> Self {
         // TODO: Maybe pull dp down for reenumeration on flash?
@@ -118,15 +133,16 @@ impl UsbSerial {
         Self {
             usb,
             class,
+            status,
         }
     }
-}
 
-#[embassy_executor::task]
-pub async fn run_usb(mut serial: UsbSerial) {
-    let usb = serial.usb.run();
-    let connector_future = UsbProtocol::connector(&mut serial.class);
+    pub async fn run(mut self) {
+        let usb = self.usb.run();
+        let protocol = UsbProtocol::new(self.status);
+        let connector_future = protocol.connector(&mut self.class);
 
-    info!("Started USB");
-    join(usb, connector_future).await;
+        info!("Started USB");
+        join(usb, connector_future).await;
+    }
 }
