@@ -5,4 +5,6 @@
 #![feature(type_alias_impl_trait)]
 
 pub mod usb_comm;
+pub mod common;
+pub mod intercom;
 pub mod status;

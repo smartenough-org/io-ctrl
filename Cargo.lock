@@ -208,6 +208,7 @@ dependencies = [
  "embassy-sync",
  "embassy-time",
  "embassy-usb",
+ "embedded-hal-async",
  "futures",
  "panic-probe",
  "static_cell",

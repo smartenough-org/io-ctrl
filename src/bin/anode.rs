@@ -4,7 +4,7 @@
 
 use {defmt_rtt as _, panic_probe as _};
 
-use defmt::info;
+use defmt::{unwrap, info};
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{AnyPin, Pin as _, Level, Output, Speed};
 use embassy_stm32::{peripherals, Config};
@@ -12,6 +12,7 @@ use embassy_time::Duration;
 use embassy_stm32::time::mhz;
 use embassy_stm32::peripherals::PA12;
 use embassy_stm32::peripherals::PC13;
+use embassy_stm32::time::Hertz;
 use static_cell::{StaticCell, make_static};
 
 use embassy_sync::pipe::Pipe;
@@ -19,17 +20,22 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 
 use diode::usb_comm::UsbSerial;
 use diode::status::{Message, Status};
+use diode::intercom::Intercom;
 
+use embassy_stm32::{
+    Peripheral,
+    spi::{
+        Spi, Instance, SckPin, MosiPin, MisoPin, TxDma, RxDma
+    }
+};
 
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
     info!("Hello World!");
 
     let mut config = Config::default();
-    // TODO: Maybe required for USB?
     config.rcc.pll48 = true;
     config.rcc.sys_ck = Some(mhz(84));
-    //config.rcc.sys_ck = Some(mhz(48));
 
     config.enable_debug_during_sleep = true;
 
@@ -39,14 +45,28 @@ pub async fn main(spawner: Spawner) {
                  &config.rcc.pll48);
 
     let p = embassy_stm32::init(config);
+
+    // Create status
     let led = Output::new(p.PC13.degrade(), Level::High, Speed::Low);
     let status: &'static Status = make_static!(Status::new(led));
     unwrap!(spawner.spawn(status_runner(status)));
 
+    // Create USB side
     let usbserial = UsbSerial::new(status, p.USB_OTG_FS, p.PA12, p.PA11);
     unwrap!(spawner.spawn(usb_runner(usbserial)));
 
+    // Create Intercom side
+    let mut spi_config = embassy_stm32::spi::Config::default();
+    spi_config.frequency = Hertz(1_000_000);
+    let spi = Spi::new(p.SPI1, p.PB3, p.PB5, p.PB4, p.DMA2_CH3, p.DMA2_CH2, spi_config);
+
+    let mut intercom = Intercom::new(spi, status);
+    // let mut intercom = Intercom::new(p.SPI1, p.PB3, p.PB5, p.PB4, p.DMA2_CH3, p.DMA2_CH2);
+
     status.set_state(Message::Init, 1).await;
+
+    // We can't create a task for intercom.
+    intercom.tx_loop().await;
 }
 
 
@@ -60,3 +80,4 @@ async fn status_runner(status: &'static Status) {
 pub async fn usb_runner(serial: UsbSerial) {
     serial.run().await;
 }
+

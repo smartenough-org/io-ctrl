@@ -11,6 +11,9 @@ embassy-sync = { version = "0.2.0", features = ["defmt"] }
 embassy-time = { version = "0.1.2", features = ["nightly", "unstable-traits", "defmt", "defmt-timestamp-uptime"] }
 embassy-stm32 = { version = "0.1.0", features = ["nightly", "unstable-traits", "defmt", "time-driver-any", "unstable-pac", "time", "stm32f411ce"] }
 
+# Required if you want to store generic stuff in structs.
+embedded-hal-async = { version = "0.2.0-alpha.2" }
+
 # Required when not using RTIC
 embassy-executor = { version = "0.2.0", features = ["nightly", "arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
 
