@@ -9,6 +9,7 @@ use embassy_stm32::peripherals::USB_OTG_FS;
 use embassy_stm32::peripherals::{PA12, PA11};
 use embassy_usb::UsbDevice;
 use embassy_futures::join::join;
+use embassy_futures::select::{select, Either};
 use static_cell::make_static;
 use crate::status::{Status, Message};
 use crate::intercom::Intercom;
@@ -28,6 +29,8 @@ type MyDriver = Driver<'static, USB_OTG_FS>;
 type MyUsb = UsbDevice<'static, MyDriver>;
 type MyClass = CdcAcmClass<'static, MyDriver>;
 
+const MAX_PACKET_SIZE: u16 = 64;
+
 struct UsbProtocol {
     status: &'static Status
 }
@@ -46,27 +49,40 @@ impl UsbProtocol {
             class.wait_connection().await;
             info!("Connected");
             self.status.set_state(Message::Attention, 2).await;
-            let _ = self.echo(class, intercom).await;
+            let _ = self.forwarder(class, intercom).await;
             info!("Disconnected");
             self.status.set_state(Message::Attention, 1).await;
         }
     }
 
     /// Connection handler
-    async fn echo(&self, class: &mut MyClass, intercom: &impl Intercom) -> Result<(), Disconnected> {
-        let mut buf = [0; 64];
+    async fn forwarder(&self, class: &mut MyClass, intercom: &impl Intercom) -> Result<(), Disconnected> {
+        let mut usb_buf = [0; 64];
+        let mut ic_buf = [0; 64];
         loop {
-            let n = class.read_packet(&mut buf).await?;
-            /* Maybe less often? */
-            self.status.try_set_state(Message::Transfer, 1);
-            let data = &buf[..n];
-            info!("data: {:x}", data);
-            class.write_packet(data).await?;
+            let usb_reader = class.read_packet(&mut usb_buf);
+            let ic_reader = intercom.read(&mut ic_buf);
+
+            match select(usb_reader, ic_reader).await {
+                Either::First(bytes) => {
+                    if let Ok(bytes) = bytes {
+                        defmt::info!("RX USB -> TX intercom {} {:?}", bytes, &usb_buf[0..bytes]);
+                        intercom.write(&usb_buf[0..bytes]).await;
+                    } else {
+                        defmt::info!("Not ok!");
+                    }
+                },
+                Either::Second(bytes) => {
+                    defmt::info!("RX intercom -> TX USB {} {}", bytes, &ic_buf[..bytes]);
+                    /* If == 64, then zero-length packet later could be required. */
+                    assert!(bytes < 64);
+                    class.write_packet(&ic_buf[0..bytes]).await?;
+                }
+            }
         }
     }
 }
 
-/// Device initialization.
 pub struct UsbSerial {
     usb: MyUsb,
     class: MyClass,
@@ -126,7 +142,7 @@ impl UsbSerial {
         );
 
         // Create classes on the builder.
-        let class = CdcAcmClass::new(&mut builder, state, 64);
+        let class = CdcAcmClass::new(&mut builder, state, MAX_PACKET_SIZE);
 
         // Build the builder.
         let usb = builder.build();

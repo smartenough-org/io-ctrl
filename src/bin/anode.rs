@@ -5,33 +5,21 @@
 
 use {defmt_rtt as _, panic_probe as _};
 
-use defmt::{unwrap, info};
+use defmt::unwrap;
+use static_cell::make_static;
 use embassy_executor::Spawner;
 use embassy_stm32::{
+    usart,
+    time::mhz,
     bind_interrupts,
     peripherals,
     Config,
-    gpio::{AnyPin, Pin as _, Level, Output, Speed}
+    gpio::{Pin as _, Level, Output, Speed}
 };
-
-use embassy_time::Duration;
-use embassy_stm32::time::mhz;
-use embassy_stm32::peripherals::PA12;
-use embassy_stm32::peripherals::PC13;
-use embassy_stm32::time::Hertz;
-use static_cell::{StaticCell, make_static};
-
-use embassy_sync::pipe::Pipe;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 
 use diode::usb_comm::UsbSerial;
 use diode::status::{Message, Status};
 use diode::intercom::UartIntercom;
-
-use embassy_stm32::{
-    Peripheral,
-    usart,
-};
 
 bind_interrupts!(struct Irqs {
     USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
@@ -39,8 +27,6 @@ bind_interrupts!(struct Irqs {
 
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
-    info!("Hello World!");
-
     let mut config = Config::default();
     config.rcc.pll48 = true;
     config.rcc.sys_ck = Some(mhz(84));
@@ -54,15 +40,24 @@ pub async fn main(spawner: Spawner) {
 
     let p = embassy_stm32::init(config);
 
+    // TODO: Is using so many statics ok? Semantically, not a problem. Can this
+    // be made easily non-static at all?
+
     // Create status
     let led = Output::new(p.PC13.degrade(), Level::High, Speed::Low);
     let status: &'static Status = make_static!(Status::new(led));
     unwrap!(spawner.spawn(status_runner(status)));
 
-    let serial_config = usart::Config::default();
+    let mut serial_config = usart::Config::default();
+
+    /* Interface has an asymetrical optoisolator with 36µs falling edge latency,
+     * and immediate rising edge. 2400 baud seem to work. For 9600 that's 34%
+     * error. */
+    serial_config.baudrate = 2400;
+    defmt::info!("Serial config baudrate {:?}", serial_config.baudrate);
     let tx_buf = make_static!([0u8; 32]);
     let rx_buf = make_static!([0u8; 32]);
-    let usart = usart::BufferedUart::new(p.USART1, Irqs, p.PB7, p.PB6,
+    let usart = usart::BufferedUart::new(p.USART1, Irqs, p.PB7 /* rx */, p.PB6 /* tx */,
                                          tx_buf, rx_buf, serial_config);
     let intercom = make_static!(UartIntercom::new(usart, status));
     unwrap!(spawner.spawn(intercom_runner(intercom)));

@@ -6,6 +6,5 @@
 #![feature(async_fn_in_trait)]
 
 pub mod usb_comm;
-pub mod common;
 pub mod intercom;
 pub mod status;

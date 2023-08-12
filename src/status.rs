@@ -1,6 +1,6 @@
-use defmt::{unwrap, info, panic};
+use defmt::info;
 use core::cell::RefCell;
-use embassy_time::{Instant, Duration, Timer, with_timeout};
+use embassy_time::{Instant, Duration, with_timeout};
 use embassy_stm32::gpio::{AnyPin, Output};
 
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
@@ -76,19 +76,14 @@ impl Status {
     async fn read_wait(&self, timeout: Duration,
                        on_t: &mut Duration, off_t: &mut Duration, until: &mut Instant) {
         let result = with_timeout(timeout, self.channel.recv()).await;
-        match result {
+        if let Ok(incoming) = result {
             // Data or timeout interrupted with data.
-            Ok(incoming) => {
-                let (new_on_t, new_off_t) = incoming.message.to_time();
-                *on_t = new_on_t;
-                *off_t = new_off_t;
-                *until = incoming.until;
-
-                info!("Status: Change {:?} {:?} - until {:?}",
-                      new_on_t, new_off_t, incoming.until);
-            }
+            let (new_on_t, new_off_t) = incoming.message.to_time();
+            *on_t = new_on_t;
+            *off_t = new_off_t;
+            *until = incoming.until;
+        } else {
             // Timeout.
-            Err(_) => ()
         }
     }
 
@@ -96,6 +91,7 @@ impl Status {
         let mut until = Instant::now();
         let (mut on_t, mut off_t) = Message::Idle.to_time();
         let mut cnt = 0;
+        // TODO: Clippy doesn't like this, is it a problem though?
         let mut led = self.led.borrow_mut();
         loop {
             led.set_low();
