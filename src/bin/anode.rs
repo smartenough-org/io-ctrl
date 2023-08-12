@@ -1,13 +1,19 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![feature(async_fn_in_trait)]
 
 use {defmt_rtt as _, panic_probe as _};
 
 use defmt::{unwrap, info};
 use embassy_executor::Spawner;
-use embassy_stm32::gpio::{AnyPin, Pin as _, Level, Output, Speed};
-use embassy_stm32::{peripherals, Config};
+use embassy_stm32::{
+    bind_interrupts,
+    peripherals,
+    Config,
+    gpio::{AnyPin, Pin as _, Level, Output, Speed}
+};
+
 use embassy_time::Duration;
 use embassy_stm32::time::mhz;
 use embassy_stm32::peripherals::PA12;
@@ -20,14 +26,16 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 
 use diode::usb_comm::UsbSerial;
 use diode::status::{Message, Status};
-use diode::intercom::Intercom;
+use diode::intercom::UartIntercom;
 
 use embassy_stm32::{
     Peripheral,
-    spi::{
-        Spi, Instance, SckPin, MosiPin, MisoPin, TxDma, RxDma
-    }
+    usart,
 };
+
+bind_interrupts!(struct Irqs {
+    USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
+});
 
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
@@ -51,33 +59,34 @@ pub async fn main(spawner: Spawner) {
     let status: &'static Status = make_static!(Status::new(led));
     unwrap!(spawner.spawn(status_runner(status)));
 
+    let serial_config = usart::Config::default();
+    let tx_buf = make_static!([0u8; 32]);
+    let rx_buf = make_static!([0u8; 32]);
+    let usart = usart::BufferedUart::new(p.USART1, Irqs, p.PB7, p.PB6,
+                                         tx_buf, rx_buf, serial_config);
+    let intercom = make_static!(UartIntercom::new(usart, status));
+    unwrap!(spawner.spawn(intercom_runner(intercom)));
+
     // Create USB side
     let usbserial = UsbSerial::new(status, p.USB_OTG_FS, p.PA12, p.PA11);
-    unwrap!(spawner.spawn(usb_runner(usbserial)));
-
-    // Create Intercom side
-    let mut spi_config = embassy_stm32::spi::Config::default();
-    spi_config.frequency = Hertz(1_000_000);
-    let spi = Spi::new(p.SPI1, p.PB3, p.PB5, p.PB4, p.DMA2_CH3, p.DMA2_CH2, spi_config);
-
-    let mut intercom = Intercom::new(spi, status);
-    // let mut intercom = Intercom::new(p.SPI1, p.PB3, p.PB5, p.PB4, p.DMA2_CH3, p.DMA2_CH2);
+    unwrap!(spawner.spawn(usb_runner(usbserial, intercom)));
 
     status.set_state(Message::Init, 1).await;
-
-    // We can't create a task for intercom.
-    intercom.tx_loop().await;
 }
 
+type BufferedIntercom<'a> = UartIntercom<usart::BufferedUart<'a, peripherals::USART1>>;
+
+#[embassy_executor::task]
+async fn intercom_runner(intercom: &'static BufferedIntercom<'static>) {
+    intercom.tx_loop().await;
+}
 
 #[embassy_executor::task]
 async fn status_runner(status: &'static Status) {
     status.update_loop().await;
 }
 
-
 #[embassy_executor::task]
-pub async fn usb_runner(serial: UsbSerial) {
-    serial.run().await;
+pub async fn usb_runner(serial: UsbSerial, intercom: &'static BufferedIntercom<'static>) {
+    serial.run(intercom).await;
 }
-

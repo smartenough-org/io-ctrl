@@ -11,6 +11,7 @@ use embassy_usb::UsbDevice;
 use embassy_futures::join::join;
 use static_cell::make_static;
 use crate::status::{Status, Message};
+use crate::intercom::Intercom;
 
 struct Disconnected;
 
@@ -39,20 +40,20 @@ impl UsbProtocol {
     }
 
     /// Connection spawner / manager.
-    async fn connector(&self, class: &mut MyClass) -> ! {
+    async fn connector(&self, class: &mut MyClass, intercom: &impl Intercom) -> ! {
         loop {
             info!("Awaiting connection in the connector");
             class.wait_connection().await;
             info!("Connected");
             self.status.set_state(Message::Attention, 2).await;
-            let _ = self.echo(class).await;
+            let _ = self.echo(class, intercom).await;
             info!("Disconnected");
             self.status.set_state(Message::Attention, 1).await;
         }
     }
 
     /// Connection handler
-    async fn echo(&self, class: &mut MyClass) -> Result<(), Disconnected> {
+    async fn echo(&self, class: &mut MyClass, intercom: &impl Intercom) -> Result<(), Disconnected> {
         let mut buf = [0; 64];
         loop {
             let n = class.read_packet(&mut buf).await?;
@@ -137,10 +138,10 @@ impl UsbSerial {
         }
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self, intercom: &impl Intercom) {
         let usb = self.usb.run();
         let protocol = UsbProtocol::new(self.status);
-        let connector_future = protocol.connector(&mut self.class);
+        let connector_future = protocol.connector(&mut self.class, intercom);
 
         info!("Started USB");
         join(usb, connector_future).await;
