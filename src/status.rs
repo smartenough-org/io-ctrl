@@ -75,7 +75,7 @@ impl Status {
 
     async fn read_wait(&self, timeout: Duration,
                        on_t: &mut Duration, off_t: &mut Duration, until: &mut Instant) {
-        let result = with_timeout(timeout, self.channel.recv()).await;
+        let result = with_timeout(timeout, self.channel.receive()).await;
         if let Ok(incoming) = result {
             // Data or timeout interrupted with data.
             let (new_on_t, new_off_t) = incoming.message.to_time();
@@ -94,10 +94,10 @@ impl Status {
         // TODO: Clippy doesn't like this, is it a problem though?
         let mut led = self.led.borrow_mut();
         loop {
-            led.set_low();
+            led.set_high();
             self.read_wait(on_t, &mut on_t, &mut off_t, &mut until).await;
 
-            led.set_high();
+            led.set_low();
             self.read_wait(off_t, &mut on_t, &mut off_t, &mut until).await;
 
             if Instant::now() > until {

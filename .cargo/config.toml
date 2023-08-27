@@ -1,0 +1,13 @@
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+# replace nRF82840_xxAA with your chip as listed in `probe-rs chip list`
+# Can try probe-rs after 0.19 again.
+# runner = "probe-rs run --chip STM32F411CEu"
+runner = "probe-run --chip STM32G431CBU"
+
+[build]
+target = "thumbv7em-none-eabi"
+
+[env]
+# Nice USB logging on trace
+# DEFMT_LOG = "trace"
+DEFMT_LOG = "debug"

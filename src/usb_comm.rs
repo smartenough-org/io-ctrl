@@ -1,11 +1,11 @@
 
 use defmt::info;
-use embassy_stm32::usb_otg::Driver;
-use embassy_stm32::{bind_interrupts, peripherals, usb_otg};
+use embassy_stm32::usb::Driver;
+use embassy_stm32::{bind_interrupts, peripherals, usb};
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
-use embassy_stm32::peripherals::USB_OTG_FS;
+use embassy_stm32::peripherals::USB;
 use embassy_stm32::peripherals::{PA12, PA11};
 use embassy_usb::UsbDevice;
 use embassy_futures::join::join;
@@ -25,7 +25,7 @@ impl From<EndpointError> for Disconnected {
     }
 }
 
-type MyDriver = Driver<'static, USB_OTG_FS>;
+type MyDriver = Driver<'static, USB>;
 type MyUsb = UsbDevice<'static, MyDriver>;
 type MyClass = CdcAcmClass<'static, MyDriver>;
 
@@ -90,30 +90,22 @@ pub struct UsbSerial {
 }
 
 bind_interrupts!(struct Irqs {
-    OTG_FS => usb_otg::InterruptHandler<peripherals::USB_OTG_FS>;
+    USB_LP => usb::InterruptHandler<peripherals::USB>;
 });
 
 impl UsbSerial {
     pub fn new(status: &'static Status,
-               usb_peripheral: USB_OTG_FS,
+               usb_peripheral: USB,
                dp: PA12,
                dm: PA11) -> Self {
         // TODO: Maybe pull dp down for reenumeration on flash?
 
-        // Create the driver, from the HAL.
-        let ep_out_buffer = make_static!([0u8; 256]);
-        let mut config = embassy_stm32::usb_otg::Config::default();
-
-        // Setting to true requires additional connection to specific PIN
-        config.vbus_detection = false;
-
-        let driver = Driver::new_fs(usb_peripheral, Irqs, dp, dm,
-                                    ep_out_buffer, config);
+        let driver = Driver::new(usb_peripheral, Irqs, dp, dm);
 
         // Create embassy-usb Config
         let mut config = embassy_usb::Config::new(0xd10d, 0x10de);
         config.manufacturer = Some("bla");
-        config.product = Some("USB->USB communication diode");
+        config.product = Some("Desk Controller");
         config.serial_number = Some("0000001");
 
         // Required for windows compatibility.
