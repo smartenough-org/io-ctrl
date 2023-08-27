@@ -16,11 +16,11 @@ use embassy_stm32::{
     Config,
     gpio::{Pin as _, Level, Output, Speed}
 };
-use embassy_time::{Duration, Timer};
 
 use dskctrl::usb_comm::UsbSerial;
 use dskctrl::status::{Message, Status};
 use dskctrl::intercom::UartIntercom;
+use embassy_time::{Duration, Timer};
 
 bind_interrupts!(struct Irqs {
     USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
@@ -29,7 +29,7 @@ bind_interrupts!(struct Irqs {
 
 /// Chip specific clock configuration.
 pub fn config_stm32g4() -> Config {
-    use embassy_stm32::rcc::{Clock48MhzSrc, ClockSrc, CrsConfig, CrsSyncSource, Pll, PllM, PllN, PllQ, PllR, PllSrc};
+    use embassy_stm32::rcc::{Clock48MhzSrc, CrsConfig, CrsSyncSource, Pll, PllM, PllN, PllQ, PllR, PllSrc};
     let mut config = Config::default();
 
     // Change this to `false` to use the HSE clock source for the USB. This example assumes an 8MHz HSE.
@@ -62,7 +62,7 @@ pub fn config_stm32g4() -> Config {
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
 
-    let mut config = config_stm32g4();
+    let config = config_stm32g4();
 
     let p = embassy_stm32::init(config);
 
@@ -94,7 +94,40 @@ pub async fn main(spawner: Spawner) {
 
     status.set_state(Message::Init, 1).await;
 
-    use embassy_stm32::gpio::{Pull, OutputOpenDrain};
+    let mut actuator_ctrl = {
+        use dskctrl::actuator::{ActuatorCtrl, Actuator, PinType};
+        use embassy_stm32::gpio::{Pull, OutputOpenDrain};
+        let do_pin = |pin| {
+            OutputOpenDrain::new(pin, Level::High, Speed::Low, Pull::None)
+        };
+        ActuatorCtrl::new([
+            // Maybe pass AnyPin instead? Can't... that's not a Trait. Makes it dependent on STM32.
+            Actuator::new(do_pin(p.PA0.degrade()), PinType::ActiveLow),
+            Actuator::new(do_pin(p.PA2.degrade()), PinType::ActiveLow),
+            Actuator::new(do_pin(p.PA4.degrade()), PinType::ActiveLow),
+            Actuator::new(do_pin(p.PA6.degrade()), PinType::ActiveLow),
+        ])
+    };
+
+    use dskctrl::actuator::{Action, Command};
+    actuator_ctrl.execute(Command::new(0, Action::On));
+
+    loop {
+        defmt::info!("ON");
+        actuator_ctrl.execute(Command::new(0, Action::On));
+        actuator_ctrl.execute(Command::new(1, Action::On));
+        actuator_ctrl.execute(Command::new(2, Action::On));
+        actuator_ctrl.execute(Command::new(3, Action::On));
+
+        Timer::after(Duration::from_millis(1000)).await;
+
+        defmt::info!("OFF");
+        actuator_ctrl.execute(Command::new(0, Action::Off));
+        actuator_ctrl.execute(Command::new(1, Action::Off));
+        actuator_ctrl.execute(Command::new(2, Action::Off));
+        actuator_ctrl.execute(Command::new(3, Action::Off));
+        Timer::after(Duration::from_millis(1000)).await;
+    }
 }
 
 type BufferedIntercom<'a> = UartIntercom<usart::BufferedUart<'a, peripherals::USART1>>;

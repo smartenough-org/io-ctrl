@@ -8,3 +8,4 @@
 pub mod usb_comm;
 pub mod intercom;
 pub mod status;
+pub mod actuator;
