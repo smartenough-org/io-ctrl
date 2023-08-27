@@ -16,27 +16,53 @@ use embassy_stm32::{
     Config,
     gpio::{Pin as _, Level, Output, Speed}
 };
+use embassy_time::{Duration, Timer};
 
-use diode::usb_comm::UsbSerial;
-use diode::status::{Message, Status};
-use diode::intercom::UartIntercom;
+use dskctrl::usb_comm::UsbSerial;
+use dskctrl::status::{Message, Status};
+use dskctrl::intercom::UartIntercom;
 
 bind_interrupts!(struct Irqs {
     USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
 });
 
+
+/// Chip specific clock configuration.
+pub fn config_stm32g4() -> Config {
+    use embassy_stm32::rcc::{Clock48MhzSrc, ClockSrc, CrsConfig, CrsSyncSource, Pll, PllM, PllN, PllQ, PllR, PllSrc};
+    let mut config = Config::default();
+
+    // Change this to `false` to use the HSE clock source for the USB. This example assumes an 8MHz HSE.
+    const USE_HSI48: bool = true;
+
+    let pllq_div = if USE_HSI48 { None } else { Some(PllQ::Div6) };
+    config.rcc.pll = Some(Pll {
+        source: PllSrc::HSE(mhz(8)),
+        prediv_m: PllM::Div2,
+        mul_n: PllN::Mul72,
+        div_p: None,
+        div_q: pllq_div,
+        // Main system clock at 144 MHz
+        div_r: Some(PllR::Div2),
+    });
+
+    if USE_HSI48 {
+        // Sets up the Clock Recovery System (CRS) to use the USB SOF to trim the HSI48 oscillator.
+        config.rcc.clock_48mhz_src = Some(Clock48MhzSrc::Hsi48(Some(CrsConfig {
+            sync_src: CrsSyncSource::Usb,
+        })));
+    } else {
+        config.rcc.clock_48mhz_src = Some(Clock48MhzSrc::PllQ);
+    }
+
+    //config.enable_debug_during_sleep = true;
+    return config;
+}
+
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
-    let mut config = Config::default();
-    config.rcc.pll48 = true;
-    config.rcc.sys_ck = Some(mhz(84));
 
-    config.enable_debug_during_sleep = true;
-
-    defmt::info!("Config is hse {:?} {:?} hclk {:?} sys_ck {:?} pclk {:?} {:?} pll48 {:?}",
-                 &config.rcc.hse, &config.rcc.bypass_hse, &config.rcc.hclk,
-                 &config.rcc.sys_ck, &config.rcc.pclk1, &config.rcc.pclk2,
-                 &config.rcc.pll48);
+    let mut config = config_stm32g4();
 
     let p = embassy_stm32::init(config);
 
@@ -44,7 +70,7 @@ pub async fn main(spawner: Spawner) {
     // be made easily non-static at all?
 
     // Create status
-    let led = Output::new(p.PC13.degrade(), Level::High, Speed::Low);
+    let led = Output::new(p.PC6.degrade(), Level::High, Speed::Low);
     let status: &'static Status = make_static!(Status::new(led));
     unwrap!(spawner.spawn(status_runner(status)));
 
@@ -63,10 +89,12 @@ pub async fn main(spawner: Spawner) {
     unwrap!(spawner.spawn(intercom_runner(intercom)));
 
     // Create USB side
-    let usbserial = UsbSerial::new(status, p.USB_OTG_FS, p.PA12, p.PA11);
+    let usbserial = UsbSerial::new(status, p.USB, p.PA12, p.PA11);
     unwrap!(spawner.spawn(usb_runner(usbserial, intercom)));
 
     status.set_state(Message::Init, 1).await;
+
+    use embassy_stm32::gpio::{Pull, OutputOpenDrain};
 }
 
 type BufferedIntercom<'a> = UartIntercom<usart::BufferedUart<'a, peripherals::USART1>>;

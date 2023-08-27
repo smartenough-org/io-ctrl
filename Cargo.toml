@@ -1,6 +1,6 @@
 [package]
 edition = "2021"
-name = "diode"
+name = "dskctrl"
 version = "0.1.0"
 license = "GPL-3.0-or-later"
 
@@ -9,15 +9,15 @@ license = "GPL-3.0-or-later"
 embassy-futures = { version = "0.1.0" }
 embassy-sync = { version = "0.2.0", features = ["defmt"] }
 embassy-time = { version = "0.1.2", features = ["nightly", "unstable-traits", "defmt", "defmt-timestamp-uptime"] }
-embassy-stm32 = { version = "0.1.0", features = ["nightly", "unstable-traits", "defmt", "time-driver-any", "unstable-pac", "time", "stm32f411ce"] }
+embassy-stm32 = { version = "0.1.0", features = ["nightly", "unstable-traits", "defmt", "time-driver-any", "unstable-pac", "time", "stm32g431cb"] }
 
 # Required if you want to store generic stuff in structs.
-embedded-hal-async = { version = "0.2.0-alpha.2" }
-embedded-hal = { version = "0.2.0-alpha.2" }
+embedded-hal-async = { version = "1.0.0-rc.1" }
+embedded-hal = { version = "0.2.7" }
 embedded-io-async = { version = "0.5.0" }
 
 # Required when not using RTIC
-embassy-executor = { version = "0.2.0", features = ["nightly", "arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
+embassy-executor = { version = "0.3.0", features = ["nightly", "arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
 
 # Additional
 embassy-usb = { version = "0.1.0", features = ["defmt", "max-interface-count-3"] }
@@ -32,11 +32,13 @@ panic-probe = { version = "0.3", features = ["print-defmt"] }
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 
 [patch.crates-io]
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "5d5cd2371504915a531e669dce3558485a51a2e1" }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "5d5cd2371504915a531e669dce3558485a51a2e1" }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "5d5cd2371504915a531e669dce3558485a51a2e1" }
-embassy-stm32 = { git = "https://github.com/embassy-rs/embassy", rev = "5d5cd2371504915a531e669dce3558485a51a2e1" }
-embassy-usb = { git = "https://github.com/embassy-rs/embassy", rev = "5d5cd2371504915a531e669dce3558485a51a2e1" }
+# Prev: 5d5cd2371504915a531e669dce3558485a51a2e1
+# Cur: 13f050167346ce262ea33c0757496b832c90fa58
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "13f050167346ce262ea33c0757496b832c90fa58" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "13f050167346ce262ea33c0757496b832c90fa58" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "13f050167346ce262ea33c0757496b832c90fa58" }
+embassy-stm32 = { git = "https://github.com/embassy-rs/embassy", rev = "13f050167346ce262ea33c0757496b832c90fa58" }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy", rev = "13f050167346ce262ea33c0757496b832c90fa58" }
 
 # Tested first: b0da6318f3eaa4a7fa247834ae5d95887c5bcf18
 
