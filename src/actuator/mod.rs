@@ -1,6 +1,8 @@
 use defmt::{Format, unwrap, info, error};
 use embedded_hal::digital::v2::OutputPin;
-use embassy_time::Instant;
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::channel::{Channel, Sender};
+use embassy_time::{Instant, Duration, with_timeout};
 
 pub mod commands;
 
@@ -69,14 +71,21 @@ impl<T: OutputPin> Actuator<T> {
 
 /// Actuator controller; manages bunch of actuators.
 pub struct ActuatorCtrl<T: OutputPin, const N: usize> {
-    pub actuators: [Actuator<T>; N]
+    actuators: [Actuator<T>; N],
+    channel: Channel<NoopRawMutex, Command, 3>,
 }
+
+type CommandChannel = Channel::<NoopRawMutex, Command, 3>;
+type CommandSender<'a> = Sender<'a, NoopRawMutex, Command, 3>;
 
 impl<T: OutputPin, const N: usize> ActuatorCtrl<T, N> {
     pub fn new(actuators: [Actuator<T>; N]) -> Self {
-        // TODO: Certain pins might be active high or low. They need config.
+        /* Channel to get the commands through */
+        let channel = CommandChannel::new();
+
         Self {
             actuators,
+            channel,
         }
     }
 
@@ -98,7 +107,17 @@ impl<T: OutputPin, const N: usize> ActuatorCtrl<T, N> {
         }
     }
 
+    pub fn get_channel(&self) -> CommandSender {
+        return self.channel.sender();
+    }
+
     pub async fn control(&mut self) {
-        todo!();
+        let timeout = Duration::from_secs(1);
+        loop {
+            let result = with_timeout(timeout, self.channel.receive()).await;
+            if let Ok(_cmd) = result {
+                todo!();
+            }
+        }
     }
 }
