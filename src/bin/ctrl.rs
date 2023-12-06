@@ -6,7 +6,7 @@
 use {defmt_rtt as _, panic_probe as _};
 
 use defmt::unwrap;
-use static_cell::make_static;
+use static_cell::{make_static, StaticCell};
 use embassy_executor::Spawner;
 use embassy_stm32::{
     usart,
@@ -59,6 +59,8 @@ pub fn config_stm32g4() -> Config {
     return config;
 }
 
+static ACTUATOR_CTRL: StaticCell<ActuatorCtrl<OutputOpenDrain<'static, AnyPin>, 4>> = StaticCell::new();
+
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
 
@@ -100,18 +102,26 @@ pub async fn main(spawner: Spawner) {
         let do_pin = |pin| {
             OutputOpenDrain::new(pin, Level::High, Speed::Low, Pull::None)
         };
-        ActuatorCtrl::new([
+        ACTUATOR_CTRL.init(ActuatorCtrl::new([
             // Maybe pass AnyPin instead? Can't... that's not a Trait. Makes it dependent on STM32.
             Actuator::new(do_pin(p.PA0.degrade()), PinType::ActiveLow),
             Actuator::new(do_pin(p.PA2.degrade()), PinType::ActiveLow),
             Actuator::new(do_pin(p.PA4.degrade()), PinType::ActiveLow),
             Actuator::new(do_pin(p.PA6.degrade()), PinType::ActiveLow),
-        ])
+        ]))
     };
 
     use dskctrl::actuator::{Action, Command};
+    /*
     actuator_ctrl.execute(Command::new(0, Action::On));
+    */
 
+    let command_sender = actuator_ctrl.get_channel();
+    unwrap!(spawner.spawn(actuator_runner(actuator_ctrl)));
+
+    command_sender.send(Command::new(0, Action::On)).await;
+
+    /*
     loop {
         defmt::info!("ON");
         actuator_ctrl.execute(Command::new(0, Action::On));
@@ -128,6 +138,7 @@ pub async fn main(spawner: Spawner) {
         actuator_ctrl.execute(Command::new(3, Action::Off));
         Timer::after(Duration::from_millis(1000)).await;
     }
+    */
 }
 
 type BufferedIntercom<'a> = UartIntercom<usart::BufferedUart<'a, peripherals::USART1>>;
@@ -140,6 +151,15 @@ async fn intercom_runner(intercom: &'static BufferedIntercom<'static>) {
 #[embassy_executor::task]
 async fn status_runner(status: &'static Status) {
     status.update_loop().await;
+}
+
+use dskctrl::actuator::{ActuatorCtrl, Actuator, PinType};
+use embassy_stm32::gpio::{Pull, OutputOpenDrain};
+use embassy_stm32::gpio::AnyPin;
+
+#[embassy_executor::task]
+pub async fn actuator_runner(actuator: &'static mut ActuatorCtrl<OutputOpenDrain<'static, AnyPin>, 4>) {
+    actuator.control().await;
 }
 
 #[embassy_executor::task]
