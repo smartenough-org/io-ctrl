@@ -1,6 +1,6 @@
 [package]
 edition = "2021"
-name = "dskctrl"
+name = "io-ctrl"
 version = "0.1.0"
 license = "GPL-3.0-or-later"
 
