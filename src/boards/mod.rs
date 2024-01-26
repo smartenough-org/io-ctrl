@@ -1,4 +1,9 @@
 
-mod ctrl_board_v1;
+mod common;
+mod hardware;
+mod shared;
 
-use ctrl_board_v1 as ctrl_board;
+pub mod ctrl_board_v1;
+
+/// Select HW version here.
+pub use ctrl_board_v1 as ctrl_board;

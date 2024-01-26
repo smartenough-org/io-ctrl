@@ -11,8 +11,10 @@ use embassy_usb::UsbDevice;
 use embassy_futures::join::join;
 use embassy_futures::select::{select, Either};
 use static_cell::make_static;
-use crate::status::{Status, Message};
-use crate::intercom::Intercom;
+use super::{
+    status::{Status, Message},
+    intercom::Intercom,
+};
 
 struct Disconnected;
 
@@ -130,6 +132,7 @@ impl UsbSerial {
             device_descriptor,
             config_descriptor,
             bos_descriptor,
+            &mut [], /* msos descriptors */
             control_buf,
         );
 

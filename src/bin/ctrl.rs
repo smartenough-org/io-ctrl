@@ -1,12 +1,13 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
-#![feature(async_fn_in_trait)]
+
+// TODO: Temporarily
+#![allow(unused_imports)]
 
 use {defmt_rtt as _, panic_probe as _};
 
-use defmt::unwrap;
-use static_cell::{make_static, StaticCell};
+use static_cell::make_static;
 use embassy_executor::Spawner;
 use embassy_stm32::{
     usart,
@@ -17,152 +18,36 @@ use embassy_stm32::{
     gpio::{Pin as _, Level, Output, Speed}
 };
 
-use dskctrl::usb_comm::UsbSerial;
-use dskctrl::status::{Message, Status};
-use dskctrl::intercom::UartIntercom;
+use io_ctrl::components::{
+    status::{Message, Status},
+    intercom::UartIntercom,
+    usb_comm::UsbSerial,
+};
 use embassy_time::{Duration, Timer};
 
-bind_interrupts!(struct Irqs {
-    USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
-});
+/// Select HW version here.
+use io_ctrl::boards::ctrl_board;
 
-
-/// Chip specific clock configuration.
-pub fn config_stm32g4() -> Config {
-    use embassy_stm32::rcc::{Clock48MhzSrc, CrsConfig, CrsSyncSource, Pll, PllM, PllN, PllQ, PllR, PllSrc};
-    let mut config = Config::default();
-
-    // Change this to `false` to use the HSE clock source for the USB. This example assumes an 8MHz HSE.
-    const USE_HSI48: bool = true;
-
-    let pllq_div = if USE_HSI48 { None } else { Some(PllQ::Div6) };
-    config.rcc.pll = Some(Pll {
-        source: PllSrc::HSE(mhz(8)),
-        prediv_m: PllM::Div2,
-        mul_n: PllN::Mul72,
-        div_p: None,
-        div_q: pllq_div,
-        // Main system clock at 144 MHz
-        div_r: Some(PllR::Div2),
-    });
-
-    if USE_HSI48 {
-        // Sets up the Clock Recovery System (CRS) to use the USB SOF to trim the HSI48 oscillator.
-        config.rcc.clock_48mhz_src = Some(Clock48MhzSrc::Hsi48(Some(CrsConfig {
-            sync_src: CrsSyncSource::Usb,
-        })));
-    } else {
-        config.rcc.clock_48mhz_src = Some(Clock48MhzSrc::PllQ);
-    }
-
-    //config.enable_debug_during_sleep = true;
-    return config;
-}
-
-static ACTUATOR_CTRL: StaticCell<ActuatorCtrl<OutputOpenDrain<'static, AnyPin>, 4>> = StaticCell::new();
+/// Main testable app logic is here.
+use io_ctrl::app::CtrlApp;
 
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
+    defmt::info!("Preinit");
 
-    let config = config_stm32g4();
+    // Create board peripherals (early init)
+    let board: &'static mut ctrl_board::Board = make_static!(ctrl_board::Board::init());
 
-    let p = embassy_stm32::init(config);
+    // Wait for stabilization of power, peripherals, etc.
+    Timer::after(Duration::from_millis(50)).await;
 
-    // TODO: Is using so many statics ok? Semantically, not a problem. Can this
-    // be made easily non-static at all?
+    // TODO Some initializations?
 
-    // Create status
-    let led = Output::new(p.PC6.degrade(), Level::High, Speed::Low);
-    let status: &'static Status = make_static!(Status::new(led));
-    unwrap!(spawner.spawn(status_runner(status)));
+    defmt::info!("Starting board");
 
-    let mut serial_config = usart::Config::default();
+    // Start board tasks.
+    board.spawn_tasks(&spawner);
 
-    /* Interface has an asymetrical optoisolator with 36µs falling edge latency,
-     * and immediate rising edge. 2400 baud seem to work. For 9600 that's 34%
-     * error. */
-    serial_config.baudrate = 2400;
-    defmt::info!("Serial config baudrate {:?}", serial_config.baudrate);
-    let tx_buf = make_static!([0u8; 32]);
-    let rx_buf = make_static!([0u8; 32]);
-    let usart = usart::BufferedUart::new(p.USART1, Irqs, p.PB7 /* rx */, p.PB6 /* tx */,
-                                         tx_buf, rx_buf, serial_config);
-    let intercom = make_static!(UartIntercom::new(usart, status));
-    unwrap!(spawner.spawn(intercom_runner(intercom)));
-
-    // Create USB side
-    let usbserial = UsbSerial::new(status, p.USB, p.PA12, p.PA11);
-    unwrap!(spawner.spawn(usb_runner(usbserial, intercom)));
-
-    status.set_state(Message::Init, 1).await;
-
-    let mut actuator_ctrl = {
-        use dskctrl::actuator::{ActuatorCtrl, Actuator, PinType};
-        use embassy_stm32::gpio::{Pull, OutputOpenDrain};
-        let do_pin = |pin| {
-            OutputOpenDrain::new(pin, Level::High, Speed::Low, Pull::None)
-        };
-        ACTUATOR_CTRL.init(ActuatorCtrl::new([
-            // Maybe pass AnyPin instead? Can't... that's not a Trait. Makes it dependent on STM32.
-            Actuator::new(do_pin(p.PA0.degrade()), PinType::ActiveLow),
-            Actuator::new(do_pin(p.PA2.degrade()), PinType::ActiveLow),
-            Actuator::new(do_pin(p.PA4.degrade()), PinType::ActiveLow),
-            Actuator::new(do_pin(p.PA6.degrade()), PinType::ActiveLow),
-        ]))
-    };
-
-    use dskctrl::actuator::{Action, Command};
-    /*
-    actuator_ctrl.execute(Command::new(0, Action::On));
-    */
-
-    let command_sender = actuator_ctrl.get_channel();
-    unwrap!(spawner.spawn(actuator_runner(actuator_ctrl)));
-
-    command_sender.send(Command::new(0, Action::On)).await;
-
-    /*
-    loop {
-        defmt::info!("ON");
-        actuator_ctrl.execute(Command::new(0, Action::On));
-        actuator_ctrl.execute(Command::new(1, Action::On));
-        actuator_ctrl.execute(Command::new(2, Action::On));
-        actuator_ctrl.execute(Command::new(3, Action::On));
-
-        Timer::after(Duration::from_millis(1000)).await;
-
-        defmt::info!("OFF");
-        actuator_ctrl.execute(Command::new(0, Action::Off));
-        actuator_ctrl.execute(Command::new(1, Action::Off));
-        actuator_ctrl.execute(Command::new(2, Action::Off));
-        actuator_ctrl.execute(Command::new(3, Action::Off));
-        Timer::after(Duration::from_millis(1000)).await;
-    }
-    */
-}
-
-type BufferedIntercom<'a> = UartIntercom<usart::BufferedUart<'a, peripherals::USART1>>;
-
-#[embassy_executor::task]
-async fn intercom_runner(intercom: &'static BufferedIntercom<'static>) {
-    intercom.tx_loop().await;
-}
-
-#[embassy_executor::task]
-async fn status_runner(status: &'static Status) {
-    status.update_loop().await;
-}
-
-use dskctrl::actuator::{ActuatorCtrl, Actuator, PinType};
-use embassy_stm32::gpio::{Pull, OutputOpenDrain};
-use embassy_stm32::gpio::AnyPin;
-
-#[embassy_executor::task]
-pub async fn actuator_runner(actuator: &'static mut ActuatorCtrl<OutputOpenDrain<'static, AnyPin>, 4>) {
-    actuator.control().await;
-}
-
-#[embassy_executor::task]
-pub async fn usb_runner(serial: UsbSerial, intercom: &'static BufferedIntercom<'static>) {
-    serial.run(intercom).await;
+    let mut app = CtrlApp::new(board);
+    app.main().await;
 }
