@@ -31,6 +31,10 @@ cortex-m-rt = "0.7.3"
 panic-probe = { version = "0.3.1", features = ["print-defmt"] }
 futures = { version = "0.3.29", default-features = false, features = ["async-await"] }
 
+# Peripherals
+port-expander = { version = "0.4.1" }
+shared-bus = { version = "0.3.0", features = ["cortex-m"] }
+
 [patch.crates-io]
 # Prev: 5d5cd2371504915a531e669dce3558485a51a2e1
 # Prev: 13f050167346ce262ea33c0757496b832c90fa58 (up to 2023.12)

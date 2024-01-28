@@ -3,6 +3,15 @@
 version = 3
 
 [[package]]
+name = "atomic-polyfill"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cf2bce30dfe09ef0bfaef228b9d414faaf7e563035494d7fe092dba54b300f4"
+dependencies = [
+ "critical-section",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -547,6 +556,8 @@ dependencies = [
  "embedded-io-async",
  "futures",
  "panic-probe",
+ "port-expander",
+ "shared-bus",
  "static_cell",
 ]
 
@@ -601,6 +612,16 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
+
+[[package]]
+name = "port-expander"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cf686f85fc0367d8828ed2a626a9c41bdd44373cfc3e08b8eb6997d92a2f9ee"
+dependencies = [
+ "embedded-hal 0.2.7",
+ "shared-bus",
+]
 
 [[package]]
 name = "portable-atomic"
@@ -704,6 +725,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.46",
+]
+
+[[package]]
+name = "shared-bus"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6b8d3f0e34309c22ca4a9a27d24fa493e31573485f3493802b75b9d706756a6"
+dependencies = [
+ "atomic-polyfill",
+ "cortex-m",
+ "embedded-hal 0.2.7",
+ "nb 1.1.0",
 ]
 
 [[package]]
