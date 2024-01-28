@@ -41,8 +41,6 @@ pub async fn main(spawner: Spawner) {
     // Wait for stabilization of power, peripherals, etc.
     Timer::after(Duration::from_millis(50)).await;
 
-    // TODO Some initializations?
-
     defmt::info!("Starting board");
 
     // Start board tasks.
