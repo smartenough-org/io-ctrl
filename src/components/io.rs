@@ -1,4 +1,4 @@
-use embedded_hal::digital::v2::{
+use embedded_hal::digital::{
     InputPin,
     OutputPin
 };

@@ -49,12 +49,12 @@ impl Default for MessageOrder {
 
 /// Controls status LED.
 pub struct Status {
-    led: RefCell<Output<'static, AnyPin>>,
+    led: RefCell<Output<'static>>,
     channel: Channel<NoopRawMutex, MessageOrder, 3>,
 }
 
 impl Status {
-    pub fn new(led: Output<'static, AnyPin>) -> Self {
+    pub fn new(led: Output<'static>) -> Self {
         let channel = Channel::<NoopRawMutex, MessageOrder, 3>::new();
         Status {
             led: RefCell::new(led),

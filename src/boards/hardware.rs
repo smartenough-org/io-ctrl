@@ -10,7 +10,7 @@ use crate::boards::shared::Shared;
 use embassy_stm32::gpio::{Level, Output, AnyPin, Pin, Pull, Speed};
 use crate::components::io;
 
-use embedded_hal::digital::v2::{
+use embedded_hal::digital::{
     InputPin,
     OutputPin
 };
@@ -36,7 +36,7 @@ type ExpanderPin = port_expander::Pin<'static, port_expander::mode::QuasiBidirec
 pub struct Hardware
 {
     // ? UnsafeCell? For led maybe ok.
-    led: UnsafeCell<Output<'static, AnyPin>>,
+    led: UnsafeCell<Output<'static>>,
 
     pub outputs: RefCell<io::IOIndex<40, ExpanderPin>>,
     pub inputs: RefCell<io::IOIndex<32, ExpanderPin>>,
