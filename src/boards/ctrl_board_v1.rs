@@ -73,8 +73,8 @@ impl Board {
         if pac::FLASH.cr().read().lock() {
             defmt::info!("Flash is locked, unlocking");
             /* Magic bytes from embassy-stm32/src/flash/g.rs / RM */
-            pac::FLASH.keyr().write_value(pac::flash::regs::Keyr(0x4567_0123));
-            pac::FLASH.keyr().write_value(pac::flash::regs::Keyr(0xCDEF_89AB));
+            pac::FLASH.keyr().write_value(0x4567_0123);
+            pac::FLASH.keyr().write_value(0xCDEF_89AB);
         }
         // Check: Should be unlocked.
         assert_eq!(pac::FLASH.cr().read().lock(), false);
@@ -84,8 +84,8 @@ impl Board {
             defmt::info!("Option bytes locked, unlocking");
 
             /* Source: RM / original HAL */
-            pac::FLASH.optkeyr().write_value(pac::flash::regs::Optkeyr(0x0819_2A3B));
-            pac::FLASH.optkeyr().write_value(pac::flash::regs::Optkeyr(0x4C5D_6E7F));
+            pac::FLASH.optkeyr().write_value(0x0819_2A3B);
+            pac::FLASH.optkeyr().write_value(0x4C5D_6E7F);
         }
         // Check: Should be unlocked
         assert_eq!(pac::FLASH.cr().read().optlock(), false);
