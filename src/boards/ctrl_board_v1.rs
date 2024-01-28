@@ -4,8 +4,10 @@ use embassy_stm32::{
     bind_interrupts,
     peripherals,
     Config,
-    gpio::{Pin as _, Level, Output, Speed}
+    gpio::{Pin as _, Level, Output, Speed},
 };
+
+use embassy_stm32::pac;
 
 use embassy_executor::Spawner;
 use static_cell::make_static;
@@ -34,8 +36,21 @@ impl Board {
         let config = common::config_stm32g4();
         let peripherals = embassy_stm32::init(config);
 
+        /* Disable BOOT0 pin, as it collides with CAN. We run from main memory always. */
+        let n_boot0 = pac::FLASH.optr().read().n_boot0();
+        let n_boot1 = pac::FLASH.optr().read().n_boot1();
+        let n_swboot0 = pac::FLASH.optr().read().n_swboot0();
+        defmt::info!("Boot config: {}, {}, {}", n_boot0, n_boot1, n_swboot0);
+        if n_boot0 == false || n_swboot0 == true {
+            Board::reconfigure_option_bytes_g4();
+        } else {
+            defmt::info!("Option bytes already configured, BOOT0 is disabled");
+        }
+
         let shared: &'static Shared = make_static!(Shared::new());
         let hardware = Hardware::new(peripherals, shared);
+
+
         Board {
             hardware,
             shared
@@ -45,5 +60,55 @@ impl Board {
     pub fn spawn_tasks(&'static self, _spawner: &Spawner) -> &Self {
         // self.hardware.start_tasks(spawner);
         self
+    }
+
+    /// According to RM0440 (page 206)
+    fn reconfigure_option_bytes_g4() {
+        defmt::info!("Disabling BOOT0 (enable GPIO)");
+
+        // Wait, while the memory interface is busy.
+        while pac::FLASH.sr().read().bsy() {}
+
+        // Unlock flash
+        if pac::FLASH.cr().read().lock() {
+            defmt::info!("Flash is locked, unlocking");
+            /* Magic bytes from embassy-stm32/src/flash/g.rs / RM */
+            pac::FLASH.keyr().write_value(pac::flash::regs::Keyr(0x4567_0123));
+            pac::FLASH.keyr().write_value(pac::flash::regs::Keyr(0xCDEF_89AB));
+        }
+        // Check: Should be unlocked.
+        assert_eq!(pac::FLASH.cr().read().lock(), false);
+
+        // Unlock Option bytes
+        if pac::FLASH.cr().read().optlock() {
+            defmt::info!("Option bytes locked, unlocking");
+
+            /* Source: RM / original HAL */
+            pac::FLASH.optkeyr().write_value(pac::flash::regs::Optkeyr(0x0819_2A3B));
+            pac::FLASH.optkeyr().write_value(pac::flash::regs::Optkeyr(0x4C5D_6E7F));
+        }
+        // Check: Should be unlocked
+        assert_eq!(pac::FLASH.cr().read().optlock(), false);
+
+        /* Program boot0 */
+        pac::FLASH.optr().modify(|r| {
+            r.set_n_boot0(true);
+            r.set_n_swboot0(false);
+        });
+
+        // Check: Should have changed
+        assert_eq!(pac::FLASH.optr().read().n_boot0(), true);
+        assert_eq!(pac::FLASH.optr().read().n_swboot0(), false);
+
+        /* Reload option bytes. This should in general cause RESET. */
+        pac::FLASH.cr().modify(|w| w.set_optstrt(true));
+        while pac::FLASH.sr().read().bsy() {}
+
+        pac::FLASH.cr().modify(|w| w.set_obl_launch(true));
+
+        defmt::info!("Relocking");
+        /* Lock option bytes and flash */
+        pac::FLASH.cr().modify(|w| w.set_optlock(true));
+        pac::FLASH.cr().modify(|w| w.set_lock(true));
     }
 }
