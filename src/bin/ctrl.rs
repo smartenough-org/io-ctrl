@@ -9,20 +9,7 @@ use {defmt_rtt as _, panic_probe as _};
 
 use static_cell::make_static;
 use embassy_executor::Spawner;
-use embassy_stm32::{
-    usart,
-    time::mhz,
-    bind_interrupts,
-    peripherals,
-    Config,
-    gpio::{Pin as _, Level, Output, Speed}
-};
 
-use io_ctrl::components::{
-    status::{Message, Status},
-    intercom::UartIntercom,
-    usb_comm::UsbSerial,
-};
 use embassy_time::{Duration, Timer};
 
 /// Select HW version here.

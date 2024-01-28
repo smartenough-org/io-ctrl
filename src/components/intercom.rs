@@ -6,7 +6,10 @@ use embassy_sync::{
 };
 use embassy_futures::select::{select, Either};
 use embedded_io_async::{Read, Write};
-use crate::status::{Message, Status};
+use super::status::{Message, Status};
+
+/* This is not a library. We will be using those in this crate only */
+#[allow(async_fn_in_trait)]
 
 // Can't use embedded_io_async traits, as they are &mut self.
 pub trait Intercom {
