@@ -4,6 +4,7 @@ use embassy_stm32::{
     bind_interrupts,
     peripherals,
     Config,
+    flash,
     gpio::{Pin as _, Level, Output, Speed},
 };
 
@@ -41,7 +42,7 @@ impl Board {
         let n_boot1 = pac::FLASH.optr().read().n_boot1();
         let n_swboot0 = pac::FLASH.optr().read().n_swboot0();
         defmt::info!("Boot config: {}, {}, {}", n_boot0, n_boot1, n_swboot0);
-        if n_boot0 == false || n_swboot0 == true {
+        if !n_boot0 || n_swboot0 {
             Board::reconfigure_option_bytes_g4();
         } else {
             defmt::info!("Option bytes already configured, BOOT0 is disabled");
@@ -63,6 +64,19 @@ impl Board {
     /// According to RM0440 (page 206)
     fn reconfigure_option_bytes_g4() {
         defmt::info!("Disabling BOOT0 (enable GPIO)");
+        /*
+        unsafe {
+            flash::program_option_bytes(|| {
+                pac::FLASH.optr().modify(|r| {
+                    r.set_n_boot0(true);
+                    r.set_n_swboot0(false);
+                });
+                let data = pac::FLASH.optr().read();
+                assert_eq!(data.n_boot0(), true);
+                assert_eq!(data.n_swboot0(), false);
+            });
+        }
+        */
 
         // Wait, while the memory interface is busy.
         while pac::FLASH.sr().read().bsy() {}
@@ -75,7 +89,7 @@ impl Board {
             pac::FLASH.keyr().write_value(0xCDEF_89AB);
         }
         // Check: Should be unlocked.
-        assert_eq!(pac::FLASH.cr().read().lock(), false);
+        assert!(!pac::FLASH.cr().read().lock());
 
         // Unlock Option bytes
         if pac::FLASH.cr().read().optlock() {
@@ -86,7 +100,7 @@ impl Board {
             pac::FLASH.optkeyr().write_value(0x4C5D_6E7F);
         }
         // Check: Should be unlocked
-        assert_eq!(pac::FLASH.cr().read().optlock(), false);
+        assert!(!pac::FLASH.cr().read().optlock());
 
         /* Program boot0 */
         pac::FLASH.optr().modify(|r| {
@@ -95,18 +109,19 @@ impl Board {
         });
 
         // Check: Should have changed
-        assert_eq!(pac::FLASH.optr().read().n_boot0(), true);
-        assert_eq!(pac::FLASH.optr().read().n_swboot0(), false);
+        assert!(pac::FLASH.optr().read().n_boot0());
+        assert!(!pac::FLASH.optr().read().n_swboot0());
 
-        /* Reload option bytes. This should in general cause RESET. */
+        // Reload option bytes. This should in general cause RESET.
         pac::FLASH.cr().modify(|w| w.set_optstrt(true));
         while pac::FLASH.sr().read().bsy() {}
 
         pac::FLASH.cr().modify(|w| w.set_obl_launch(true));
 
         defmt::info!("Relocking");
-        /* Lock option bytes and flash */
+        // Lock option bytes and flash
         pac::FLASH.cr().modify(|w| w.set_optlock(true));
         pac::FLASH.cr().modify(|w| w.set_lock(true));
+
     }
 }

@@ -1,7 +1,8 @@
-use embedded_hal::digital::{
+use embedded_hal_02::digital::v2::{
     InputPin,
     OutputPin
 };
+
 use embassy_stm32::gpio::low_level::Pin as _;
 
 use embassy_stm32::gpio::{AnyPin, Input, Pull};
@@ -33,13 +34,13 @@ where
         }
     }
 
-    // TODO: Should use Result<>
     pub fn set_high(&mut self, idx: usize) {
         match &mut self.pins[idx] {
             UniPin::Native(pin) => {
                 pin.set_high();
             }
             UniPin::Expander(pin) => {
+                // TODO: Should use Result<>
                 let _ = pin.set_high();
             }
         }
@@ -60,11 +61,11 @@ where
         match &mut self.pins[idx] {
             UniPin::Native(pin) => {
                 let inp = Input::new(pin, Pull::Up);
-                inp.is_high() == true
+                inp.is_high()
             }
             UniPin::Expander(pin) => {
-                if let Some(value) = pin.is_high().ok() {
-                    value == true
+                if let Ok(value) = pin.is_high() {
+                    value
                 } else {
                     /* FIXME So-so. */
                     false

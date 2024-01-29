@@ -442,10 +442,9 @@ checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
 [[package]]
 name = "fdcan"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "553fb8420a8ca433ed032a3f284deeb95c12e4d3d25cdc15196669a27b2ae34b"
 dependencies = [
  "bitflags",
+ "defmt",
  "nb 1.1.0",
  "paste",
  "static_assertions",
@@ -571,9 +570,11 @@ dependencies = [
  "embassy-sync",
  "embassy-time",
  "embassy-usb",
+ "embedded-hal 0.2.7",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-io-async",
+ "fdcan",
  "futures",
  "panic-probe",
  "port-expander",
@@ -808,8 +809,7 @@ dependencies = [
 [[package]]
 name = "stm32-metapac"
 version = "15.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "deabea56a8821dcea05d0109f3ab3135f31eb572444e5da203d06149c594c8c6"
+source = "git+https://github.com/embassy-rs/stm32-data-generated?tag=stm32-data-e702b4d564bc9e3c8a5c0141a11efdc5f7ee8f24#470a1d50a53936232a9ef8f2a66215ca1c151260"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",

@@ -2,7 +2,7 @@ use core::cell::{
     RefCell,
     UnsafeCell
 };
-use defmt::unwrap;
+use defmt::{info, unwrap};
 use crate::boards::shared::Shared;
 
 use embassy_stm32::gpio::{Level, Output, AnyPin, Pin, Pull, Speed};
@@ -45,8 +45,8 @@ pub struct Hardware
     // ? UnsafeCell? For led maybe ok.
     led: UnsafeCell<Output<'static>>,
 
-    pub outputs: RefCell<io::IOIndex<8, ExpanderPin>>,
-    pub inputs: RefCell<io::IOIndex<16, ExpanderPin>>,
+    pub outputs: RefCell<io::IOIndex<40, ExpanderPin>>,
+    pub inputs: RefCell<io::IOIndex<32, ExpanderPin>>,
     pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
 }
 
@@ -61,7 +61,19 @@ impl Hardware
 
         // 250k bps
         can.set_bitrate(250_000);
+
+        let dar1 = pac::FDCAN1.cccr().read().dar();
+        pac::FDCAN1.cccr().read().set_dar(false);
+        let dar2 = pac::FDCAN1.cccr().read().dar();
+
+        info!("BEF {} AFT {}", dar1, dar2);
         let can = can.into_normal_mode();
+
+        let dar1 = pac::FDCAN1.cccr().read().dar();
+        pac::FDCAN1.cccr().read().set_dar(false);
+        let dar2 = pac::FDCAN1.cccr().read().dar();
+
+        info!("BEF {} AFT {}", dar1, dar2);
         let interconnect = interconnect::Interconnect::new(can);
 
         /* Initialize I²C and 16-bit port expanders */
@@ -102,7 +114,7 @@ impl Hardware
             io::UniPin::Native(p.PB12.degrade()),
             io::UniPin::Native(p.PB11.degrade()),
 
-            /* First expander - assumed outputs */
+            // First expander - assumed outputs
             io::UniPin::Expander(exp1_pins.p00),
             io::UniPin::Expander(exp1_pins.p01),
             io::UniPin::Expander(exp1_pins.p02),
@@ -120,7 +132,7 @@ impl Hardware
             io::UniPin::Expander(exp1_pins.p16),
             io::UniPin::Expander(exp1_pins.p17),
 
-            /* Third expander - to be decided what is i t */
+            // Third expander - to be decided what is it
             io::UniPin::Expander(exp3_pins.p00),
             io::UniPin::Expander(exp3_pins.p01),
             io::UniPin::Expander(exp3_pins.p02),
@@ -140,7 +152,7 @@ impl Hardware
         ]);
 
         let inputs = io::IOIndex::new([
-            /* IO_COLS_0 Header: TT_EXT 0 to 7 (Assumed to be inputs) */
+            // IO_COLS_0 Header: TT_EXT 0 to 7 (Assumed to be inputs)
             io::UniPin::Native(p.PA0.degrade()),
             io::UniPin::Native(p.PA1.degrade()),
             io::UniPin::Native(p.PA2.degrade()),
@@ -150,7 +162,7 @@ impl Hardware
             io::UniPin::Native(p.PA6.degrade()),
             io::UniPin::Native(p.PA7.degrade()),
 
-            /* IO_ROWS_AN1 - maybe inputs? Unsure */
+            // IO_ROWS_AN1 - maybe inputs? Unsure
             io::UniPin::Native(p.PC10.degrade()),
             io::UniPin::Native(p.PA15.degrade()),
             io::UniPin::Native(p.PB10.degrade()),
@@ -161,7 +173,7 @@ impl Hardware
             io::UniPin::Native(p.PB2.degrade()),
             io::UniPin::Native(p.PB0.degrade()),
 
-            /* Second expander - Assumed inputs */
+            // Second expander - Assumed inputs
             io::UniPin::Expander(exp2_pins.p00),
             io::UniPin::Expander(exp2_pins.p01),
             io::UniPin::Expander(exp2_pins.p02),

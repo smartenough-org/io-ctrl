@@ -36,5 +36,5 @@ pub fn config_stm32g4() -> Config {
     }
 
     //config.enable_debug_during_sleep = true;
-    return config;
+    config
 }
