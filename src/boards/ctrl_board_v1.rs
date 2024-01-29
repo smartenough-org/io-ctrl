@@ -14,9 +14,9 @@ use static_cell::make_static;
 use crate::boards::common;
 use crate::boards::hardware::Hardware;
 use crate::boards::shared::Shared;
+use defmt::unwrap;
 
-/* TODO Should use those */
-use crate::components::*;
+use crate::components::interconnect;
 
 
 // TODO Desc
@@ -50,16 +50,14 @@ impl Board {
         let shared: &'static Shared = make_static!(Shared::new());
         let hardware = Hardware::new(peripherals, shared);
 
-
         Board {
             hardware,
             shared
         }
     }
 
-    pub fn spawn_tasks(&'static self, _spawner: &Spawner) -> &Self {
-        // self.hardware.start_tasks(spawner);
-        self
+    pub fn spawn_tasks(&'static self, spawner: &Spawner) {
+        unwrap!(spawner.spawn(interconnect::spawn(&self.hardware.interconnect)));
     }
 
     /// According to RM0440 (page 206)
