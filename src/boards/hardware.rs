@@ -45,8 +45,8 @@ pub struct Hardware
     // ? UnsafeCell? For led maybe ok.
     led: UnsafeCell<Output<'static>>,
 
-    pub outputs: RefCell<io::IOIndex<8, ExpanderPin>>,
-    pub inputs: RefCell<io::IOIndex<16, ExpanderPin>>,
+    pub outputs: RefCell<io::IOIndex<40, ExpanderPin>>,
+    pub inputs: RefCell<io::IOIndex<32, ExpanderPin>>,
     pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
 }
 
