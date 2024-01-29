@@ -1,5 +1,3 @@
-// use embassy_stm32;
-
 use core::cell::{
     RefCell,
     UnsafeCell
@@ -8,19 +6,28 @@ use defmt::unwrap;
 use crate::boards::shared::Shared;
 
 use embassy_stm32::gpio::{Level, Output, AnyPin, Pin, Pull, Speed};
-use crate::components::io;
+use crate::components::{
+    io,
+    interconnect,
+};
 
 use embedded_hal::digital::{
     InputPin,
     OutputPin
 };
 
+use embassy_stm32::pac;
 use embassy_stm32::dma::NoDma;
 use embassy_stm32::i2c::{Error, I2c};
 use embassy_stm32::time::Hertz;
-use embassy_stm32::{bind_interrupts, i2c, peripherals};
+use embassy_stm32::{bind_interrupts, can, i2c, peripherals};
 use port_expander::{Pcf8575, dev::pcf8575, write_multiple};
 use static_cell::make_static;
+
+bind_interrupts!(struct CanIrqs {
+    FDCAN1_IT0 => can::IT0InterruptHandler<peripherals::FDCAN1>;
+    FDCAN1_IT1 => can::IT1InterruptHandler<peripherals::FDCAN1>;
+});
 
 bind_interrupts!(struct I2CIrqs {
     I2C3_EV => i2c::EventInterruptHandler<peripherals::I2C3>;
@@ -38,8 +45,9 @@ pub struct Hardware
     // ? UnsafeCell? For led maybe ok.
     led: UnsafeCell<Output<'static>>,
 
-    pub outputs: RefCell<io::IOIndex<40, ExpanderPin>>,
-    pub inputs: RefCell<io::IOIndex<32, ExpanderPin>>,
+    pub outputs: RefCell<io::IOIndex<8, ExpanderPin>>,
+    pub inputs: RefCell<io::IOIndex<16, ExpanderPin>>,
+    pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
 }
 
 impl Hardware
@@ -48,6 +56,15 @@ impl Hardware
         p: embassy_stm32::Peripherals,
         _shared_resource: &'static Shared,
     ) -> Self {
+        /* Initialize CAN */
+        let mut can = can::Fdcan::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
+
+        // 250k bps
+        can.set_bitrate(250_000);
+        let can = can.into_normal_mode();
+        let interconnect = interconnect::Interconnect::new(can);
+
+        /* Initialize I²C and 16-bit port expanders */
         let i2c = I2c::new(
             p.I2C3,
             p.PA8,
@@ -172,11 +189,11 @@ impl Hardware
         defmt::info!("Size of inputs is {}", size);
         */
 
-        // TODO!
         Self {
             led: UnsafeCell::new(Output::new(p.PC6.degrade(), Level::Low, Speed::Low)),
             outputs: RefCell::new(outputs),
             inputs: RefCell::new(inputs),
+            interconnect,
         }
     }
 
