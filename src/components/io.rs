@@ -7,6 +7,8 @@ use embassy_stm32::gpio::low_level::Pin as _;
 
 use embassy_stm32::gpio::{AnyPin, Input, Pull};
 
+// TODO: Maybe in newer version the expander pin would support AnyPin or some common trait?
+// Or maybe the NativePin could just use Output/Input/Sized traits? That's a different concrete type though.
 pub enum UniPin<P>
 where
     P: OutputPin + InputPin + Sized

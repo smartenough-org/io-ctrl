@@ -38,7 +38,7 @@ futures = { version = "0.3.30", default-features = false, features = ["async-awa
 # Peripherals
 port-expander = { version = "0.4.1" }
 shared-bus = { version = "0.3.0", features = ["cortex-m"] }
-fdcan = { version = "0.2.0" }
+# fdcan = { version = "0.2.0" }
 
 [patch.crates-io]
 # Cur: 7703f47c1ecac029f603033b7977d9a2becef48c
@@ -56,6 +56,8 @@ embassy-futures = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-futures" 
 embassy-sync = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-sync" }
 embassy-usb = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-usb" }
 embassy-executor = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-executor" }
+# fdcan = { path = "/home/bla/_smarthome/fdcan/" }
+
 # Tested first: b0da6318f3eaa4a7fa247834ae5d95887c5bcf18
 
 

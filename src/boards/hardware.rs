@@ -9,6 +9,7 @@ use embassy_stm32::gpio::{Level, Output, AnyPin, Pin, Pull, Speed};
 use crate::components::{
     io,
     interconnect,
+    debouncer,
 };
 
 use embedded_hal::digital::{
@@ -39,15 +40,18 @@ use embassy_stm32::peripherals::I2C3;
 type BusProxy = shared_bus::I2cProxy<'static, shared_bus::NullMutex<I2c<'static, I2C3>>>;
 type Expander = shared_bus::NullMutex<pcf8575::Driver<BusProxy>>;
 type ExpanderPin = port_expander::Pin<'static, port_expander::mode::QuasiBidirectional, Expander>;
+type Debouncer = debouncer::Debouncer<16, ExpanderPin>;
 
 pub struct Hardware
 {
     // ? UnsafeCell? For led maybe ok.
     led: UnsafeCell<Output<'static>>,
 
-    pub outputs: RefCell<io::IOIndex<40, ExpanderPin>>,
-    pub inputs: RefCell<io::IOIndex<32, ExpanderPin>>,
-    pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
+    pub outputs: RefCell<io::IOIndex<32, ExpanderPin>>,
+    // pub inputs: RefCell<io::IOIndex<16, ExpanderPin>>,
+    pub debouncer: Debouncer,
+    // pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
+    pub interconnect: interconnect::Interconnect,
 }
 
 impl Hardware
@@ -57,24 +61,25 @@ impl Hardware
         _shared_resource: &'static Shared,
     ) -> Self {
         /* Initialize CAN */
-        let mut can = can::Fdcan::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
+        // let mut can = can::Fdcan::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
 
         // 250k bps
-        can.set_bitrate(250_000);
+        // can.set_bitrate(250_000);
 
         let dar1 = pac::FDCAN1.cccr().read().dar();
         pac::FDCAN1.cccr().read().set_dar(false);
         let dar2 = pac::FDCAN1.cccr().read().dar();
 
         info!("BEF {} AFT {}", dar1, dar2);
-        let can = can.into_normal_mode();
+        // let can = can.into_normal_mode();
 
         let dar1 = pac::FDCAN1.cccr().read().dar();
         pac::FDCAN1.cccr().read().set_dar(false);
         let dar2 = pac::FDCAN1.cccr().read().dar();
 
         info!("BEF {} AFT {}", dar1, dar2);
-        let interconnect = interconnect::Interconnect::new(can);
+        // let interconnect = interconnect::Interconnect::new(can);
+        let interconnect = interconnect::Interconnect::new();
 
         /* Initialize I²C and 16-bit port expanders */
         let i2c = I2c::new(
@@ -92,18 +97,26 @@ impl Hardware
         let bus = make_static!(shared_bus::BusManagerSimple::new(i2c));
 
         /* TODO: Assumption we have up to 3 expanders. One for outputs, one for inputs */
+        /* Inputs */
         let exp1 = make_static!(Pcf8575::new(bus.acquire_i2c(), false, false, false));
-        let exp2 = make_static!(Pcf8575::new(bus.acquire_i2c(), false, false, true));
+        /* Outputs */
+        let exp2 = make_static!(Pcf8575::new(bus.acquire_i2c(), true, true, true));
+        /* Unknown yet! */
         let exp3 = make_static!(Pcf8575::new(bus.acquire_i2c(), false, true, false));
+
         let exp1_pins = exp1.split();
         let exp2_pins = exp2.split();
         let exp3_pins = exp3.split();
 
-        /* Gather all operable pins on the device. Some on expanders, some not. Assign them IDs */
+        /* TODO: The expander reading could be improved with INT and reading
+         * multiple IOs at the time, but we need a caching layer so that the IOs
+         * can still be properly abstracted
+         */
 
-        /* TODO: Separate outputs and inputs? */
+        /* Gather all operable pins on the device. Some on expanders, some not. Assign them IDs */
         let outputs = io::IOIndex::new([
             /* IO_OUTS_0 Header */
+            /*
             io::UniPin::Native(p.PB3.degrade()),
             io::UniPin::Native(p.PB6.degrade()),
             io::UniPin::Native(p.PC4.degrade()),
@@ -113,6 +126,7 @@ impl Hardware
             io::UniPin::Native(p.PB7.degrade()),
             io::UniPin::Native(p.PB12.degrade()),
             io::UniPin::Native(p.PB11.degrade()),
+            */
 
             // First expander - assumed outputs
             io::UniPin::Expander(exp1_pins.p00),
@@ -152,6 +166,7 @@ impl Hardware
         ]);
 
         let inputs = io::IOIndex::new([
+            /*
             // IO_COLS_0 Header: TT_EXT 0 to 7 (Assumed to be inputs)
             io::UniPin::Native(p.PA0.degrade()),
             io::UniPin::Native(p.PA1.degrade()),
@@ -172,6 +187,7 @@ impl Hardware
             io::UniPin::Native(p.PB13.degrade()),
             io::UniPin::Native(p.PB2.degrade()),
             io::UniPin::Native(p.PB0.degrade()),
+            */
 
             // Second expander - Assumed inputs
             io::UniPin::Expander(exp2_pins.p00),
@@ -201,10 +217,13 @@ impl Hardware
         defmt::info!("Size of inputs is {}", size);
         */
 
+        let debouncer = Debouncer::new(inputs);
+
         Self {
             led: UnsafeCell::new(Output::new(p.PC6.degrade(), Level::Low, Speed::Low)),
             outputs: RefCell::new(outputs),
-            inputs: RefCell::new(inputs),
+            // inputs: RefCell::new(inputs),
+            debouncer: debouncer,
             interconnect,
         }
     }
@@ -219,4 +238,10 @@ impl Hardware
         let led = unsafe { &mut *self.led.get() };
         led.set_low();
     }
+}
+
+
+#[embassy_executor::task(pool_size = 1)]
+pub async fn spawn_debouncer(debouncer: &'static Debouncer) {
+    debouncer.run().await;
 }

@@ -45,17 +45,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
-name = "bxcan"
-version = "0.7.0"
+name = "bitflags"
+version = "2.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40ac3d0c0a542d0ab5521211f873f62706a7136df415676f676d347e5a41dd80"
-dependencies = [
- "bitflags",
- "defmt",
- "embedded-hal 0.2.7",
- "nb 1.1.0",
- "vcell",
-]
+checksum = "ed570934406eb16438a4e976b1b4500774099c13b8cb96eec99f620f05090ddf"
 
 [[package]]
 name = "byteorder"
@@ -149,7 +142,7 @@ version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8a2d011b2fee29fb7d659b83c43fce9a2cb4df453e16d441a51448e448f3f98"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "defmt-macros",
 ]
 
@@ -268,7 +261,7 @@ name = "embassy-stm32"
 version = "0.1.0"
 dependencies = [
  "bit_field",
- "bxcan",
+ "bitflags 2.4.2",
  "cfg-if",
  "cortex-m",
  "cortex-m-rt",
@@ -283,6 +276,7 @@ dependencies = [
  "embassy-time",
  "embassy-time-driver",
  "embassy-usb-driver",
+ "embedded-can",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
@@ -291,16 +285,17 @@ dependencies = [
  "embedded-io-async",
  "embedded-storage",
  "embedded-storage-async",
- "fdcan",
  "futures",
  "nb 1.1.0",
  "proc-macro2",
  "quote",
  "rand_core",
  "sdio-host",
+ "static_assertions",
  "stm32-fmc",
  "stm32-metapac",
  "vcell",
+ "volatile-register",
 ]
 
 [[package]]
@@ -362,6 +357,15 @@ name = "embassy-usb-driver"
 version = "0.1.0"
 dependencies = [
  "defmt",
+]
+
+[[package]]
+name = "embedded-can"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9d2e857f87ac832df68fa498d18ddc679175cf3d2e4aa893988e5601baf9438"
+dependencies = [
+ "nb 1.1.0",
 ]
 
 [[package]]
@@ -438,19 +442,6 @@ name = "encode_unicode"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
-
-[[package]]
-name = "fdcan"
-version = "0.2.0"
-dependencies = [
- "bitflags",
- "defmt",
- "nb 1.1.0",
- "paste",
- "static_assertions",
- "vcell",
- "volatile-register",
-]
 
 [[package]]
 name = "fnv"
@@ -574,7 +565,6 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-io-async",
- "fdcan",
  "futures",
  "panic-probe",
  "port-expander",
@@ -621,12 +611,6 @@ dependencies = [
  "cortex-m",
  "defmt",
 ]
-
-[[package]]
-name = "paste"
-version = "1.0.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
 name = "pin-project-lite"
@@ -809,7 +793,7 @@ dependencies = [
 [[package]]
 name = "stm32-metapac"
 version = "15.0.0"
-source = "git+https://github.com/embassy-rs/stm32-data-generated?tag=stm32-data-e702b4d564bc9e3c8a5c0141a11efdc5f7ee8f24#470a1d50a53936232a9ef8f2a66215ca1c151260"
+source = "git+https://github.com/embassy-rs/stm32-data-generated?tag=stm32-data-c8b32ecae7d70cea2705095c4fc6bd5f59d238d5#594f8f89ad19eb85df6925eada450db04eaa0066"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -871,15 +855,19 @@ checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
 
 [[package]]
 name = "usb-device"
-version = "0.2.9"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f6cc3adc849b5292b4075fc0d5fdcf2f24866e88e336dd27a8943090a520508"
+checksum = "98816b1accafbb09085168b90f27e93d790b4bfa19d883466b5e53315b5f06a6"
+dependencies = [
+ "heapless",
+ "portable-atomic",
+]
 
 [[package]]
 name = "usbd-hid"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "975bd411f4a939986751ea09992a24fa47c4d25c6ed108d04b4c2999a4fd0132"
+checksum = "41a2d4546ca3e6a5c6a85584e5caf29feabf3ec35d6cd6b772eb35bd3cff7256"
 dependencies = [
  "serde",
  "ssmarshal",
