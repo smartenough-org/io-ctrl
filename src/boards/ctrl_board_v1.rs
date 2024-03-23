@@ -13,11 +13,14 @@ use embassy_stm32::pac;
 use embassy_executor::Spawner;
 use static_cell::make_static;
 use crate::boards::common;
-use crate::boards::hardware::Hardware;
+use crate::boards::hardware;
 use crate::boards::shared::Shared;
 use defmt::unwrap;
 
-use crate::components::interconnect;
+use crate::components::{
+    interconnect,
+    debouncer,
+};
 
 
 // TODO Desc
@@ -26,7 +29,7 @@ bind_interrupts!(struct Irqs {
 });
 
 pub struct Board {
-    pub hardware: Hardware,
+    pub hardware: hardware::Hardware,
     pub shared: &'static Shared,
     // pub shared_resource: &'static SharedResource,
 }
@@ -49,7 +52,7 @@ impl Board {
         }
 
         let shared: &'static Shared = make_static!(Shared::new());
-        let hardware = Hardware::new(peripherals, shared);
+        let hardware = hardware::Hardware::new(peripherals, shared);
 
         Board {
             hardware,
@@ -59,6 +62,7 @@ impl Board {
 
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(interconnect::spawn(&self.hardware.interconnect)));
+        unwrap!(spawner.spawn(hardware::spawn_debouncer(&self.hardware.debouncer)));
     }
 
     /// According to RM0440 (page 206)
