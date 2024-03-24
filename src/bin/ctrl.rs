@@ -33,6 +33,6 @@ pub async fn main(spawner: Spawner) {
     // Start board tasks.
     board.spawn_tasks(&spawner);
 
-    let mut app = CtrlApp::new(board);
-    app.main().await;
+    let mut app = make_static!(CtrlApp::new(board));
+    app.main(&spawner).await;
 }

@@ -126,6 +126,5 @@ impl Board {
         // Lock option bytes and flash
         pac::FLASH.cr().modify(|w| w.set_optlock(true));
         pac::FLASH.cr().modify(|w| w.set_lock(true));
-
     }
 }

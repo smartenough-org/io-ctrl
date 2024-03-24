@@ -36,6 +36,7 @@ where
         }
     }
 
+    /// Set output state to high
     pub fn set_high(&mut self, idx: usize) {
         match &mut self.pins[idx] {
             UniPin::Native(pin) => {
@@ -43,19 +44,33 @@ where
             }
             UniPin::Expander(pin) => {
                 // TODO: Should use Result<>
-                let _ = pin.set_high();
+                if let Err(_) = pin.set_high() {
+                    defmt::error!("Error while setting expander IO {} high", idx);
+                }
             }
         }
     }
 
+    /// Set output state to low
     pub fn set_low(&mut self, idx: usize) {
         match &mut self.pins[idx] {
             UniPin::Native(pin) => {
                 pin.set_low();
             }
             UniPin::Expander(pin) => {
-                let _ = pin.set_low();
+                if let Err(_) = pin.set_low() {
+                    defmt::error!("Error while setting expander IO {} low", idx);
+                }
             }
+        }
+    }
+
+    /// Set output assuming true -> high state, and false -> low state.
+    pub fn set(&mut self, idx: usize, state: bool) {
+        if state {
+            self.set_high(idx);
+        } else {
+            self.set_low(idx);
         }
     }
 
