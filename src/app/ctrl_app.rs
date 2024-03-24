@@ -1,26 +1,36 @@
+use defmt::unwrap;
+use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use embassy_stm32::{pac, uid};
+use static_cell::make_static;
 
 use crate::boards::ctrl_board::Board;
+use crate::app::io_router;
 use port_expander::write_multiple;
 
 pub struct CtrlApp
 {
     pub board: &'static Board,
+
+    pub io_router: &'static io_router::IORouter,
 }
 
 impl CtrlApp
 {
     pub fn new(board: &'static Board) -> Self {
-        Self { board }
+        let io_router = make_static!(io_router::IORouter::new(&board));
+        Self {
+            io_router,
+            board
+        }
     }
 
-    pub async fn main(&mut self) -> ! {
+    fn spawn_tasks(&'static self, spawner: &Spawner) {
+        unwrap!(spawner.spawn(io_router::task(&self.io_router)));
+    }
 
-        let mut outputs = self.board.hardware.outputs.borrow_mut();
-        outputs.set_low(8);
-        outputs.set_low(23);
-        //outputs.set_low(25);
+    pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
+        self.spawn_tasks(&spawner);
 
         /*
         let mut pcf_pins = self.board.hardware.get_expander_pins();
@@ -84,6 +94,7 @@ impl CtrlApp
             Timer::after(Duration::from_millis(1000)).await;
             self.board.hardware.led_off();
 
+            /*
             let ir_reg = pac::FDCAN1.ir().read();
             let cccr_reg = pac::FDCAN1.cccr().read();
             let psr_reg = pac::FDCAN1.cccr().read();
@@ -93,6 +104,7 @@ impl CtrlApp
 
                          ir_reg.0, psr_reg.0, ir_reg.pea(), ir_reg.ped(), ir_reg.bo(),
                          ir_reg.ew(), ir_reg.ep(), ir_reg.tcf(), ir_reg.mraf());
+            */
         }
     }
 }

@@ -42,14 +42,22 @@ type Expander = shared_bus::NullMutex<pcf8575::Driver<BusProxy>>;
 type ExpanderPin = port_expander::Pin<'static, port_expander::mode::QuasiBidirectional, Expander>;
 type Debouncer = debouncer::Debouncer<16, ExpanderPin>;
 
+/*
+ * Hardware is shared between components and requires some internal mutability.
+ */
+
+
+/// Represents our µC hardware interface.
 pub struct Hardware
 {
     // ? UnsafeCell? For led maybe ok.
     led: UnsafeCell<Output<'static>>,
 
+    /// Handle physical outputs - relays, SSRs, etc.
     pub outputs: RefCell<io::IOIndex<32, ExpanderPin>>,
-    // pub inputs: RefCell<io::IOIndex<16, ExpanderPin>>,
+    /// Handle physical switches - inputs.
     pub debouncer: Debouncer,
+
     // pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
     pub interconnect: interconnect::Interconnect,
 }
@@ -222,8 +230,7 @@ impl Hardware
         Self {
             led: UnsafeCell::new(Output::new(p.PC6.degrade(), Level::Low, Speed::Low)),
             outputs: RefCell::new(outputs),
-            // inputs: RefCell::new(inputs),
-            debouncer: debouncer,
+            debouncer,
             interconnect,
         }
     }
@@ -238,9 +245,15 @@ impl Hardware
         let led = unsafe { &mut *self.led.get() };
         led.set_low();
     }
+
+    pub fn set_output(&self, idx: usize, state: bool) {
+        let mut outs = self.outputs.borrow_mut();
+        outs.set(idx, state);
+    }
 }
 
 
+/* Set of hardware tasks */
 #[embassy_executor::task(pool_size = 1)]
 pub async fn spawn_debouncer(debouncer: &'static Debouncer) {
     debouncer.run().await;
