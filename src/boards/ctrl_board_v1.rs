@@ -34,7 +34,6 @@ pub struct Board {
     // pub shared_resource: &'static SharedResource,
 }
 
-
 impl Board {
     pub fn init() -> Self {
         let config = common::config_stm32g4();
@@ -62,7 +61,7 @@ impl Board {
 
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(interconnect::spawn(&self.hardware.interconnect)));
-        // unwrap!(spawner.spawn(hardware::spawn_debouncer(&self.hardware.debouncer)));
+        unwrap!(spawner.spawn(hardware::spawn_readers(&self.hardware.expander_reader)));
     }
 
     /// According to RM0440 (page 206)
