@@ -19,7 +19,7 @@ use defmt::unwrap;
 
 use crate::components::{
     interconnect,
-    debouncer,
+    // debouncer,
 };
 
 

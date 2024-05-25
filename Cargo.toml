@@ -17,9 +17,9 @@ embassy-stm32 = { version = "0.1.0", features = ["defmt", "time-driver-any", "un
 embedded-hal-async = { version = "1.0.0" }
 embedded-hal = { version = "1.0.0" }
 embedded-io-async = { version = "0.6.1" }
+embassy-embedded-hal = { version = "0.1.0" }
 
-# Required when not using RTIC
-embassy-executor = { version = "0.5.0", features = ["nightly", "arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
+embassy-executor = { version = "0.5.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
 
 # Additional
 embassy-usb = { version = "0.2.0", features = ["defmt", "max-interface-count-3"] }
@@ -36,7 +36,6 @@ futures = { version = "0.3.30", default-features = false, features = ["async-awa
 # Peripherals
 # port-expander = { version = "0.6.1" } # 0.6.1
 shared-bus = { version = "0.3.1", features = ["cortex-m"] }
-embassy-embedded-hal = { version = "0.1.0" }
 # fdcan = { version = "0.2.0" }
 
 [patch.crates-io]

@@ -5,8 +5,6 @@
 
 // For static_cell
 #![feature(type_alias_impl_trait)]
-// Embassy
-#![feature(impl_trait_in_assoc_type)]
 
 /*
 TODO: Those two (USB, Intercom) are not A#
