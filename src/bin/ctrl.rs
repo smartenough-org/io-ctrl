@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
+// Static cell
 #![feature(type_alias_impl_trait)]
+// Embassy
+#![feature(impl_trait_in_assoc_type)]
 
 // TODO: Temporarily
 #![allow(unused_imports)]

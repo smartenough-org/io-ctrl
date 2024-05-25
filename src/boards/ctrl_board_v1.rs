@@ -62,7 +62,7 @@ impl Board {
 
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(interconnect::spawn(&self.hardware.interconnect)));
-        unwrap!(spawner.spawn(hardware::spawn_debouncer(&self.hardware.debouncer)));
+        // unwrap!(spawner.spawn(hardware::spawn_debouncer(&self.hardware.debouncer)));
     }
 
     /// According to RM0440 (page 206)

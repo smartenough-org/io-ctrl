@@ -28,7 +28,7 @@ impl Interconnect {
 }
 
 /* Fixme, this should not depend on FDCAN1 */
-#[embassy_executor::task(pool_size = 1)]
+#[embassy_executor::task]
 pub async fn spawn(can: &'static Interconnect) {
     can.run().await
 }
