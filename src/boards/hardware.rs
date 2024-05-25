@@ -1,8 +1,7 @@
 use core::cell::{
-    RefCell,
     UnsafeCell
 };
-use defmt::{info, unwrap};
+use defmt::info;
 use embassy_sync::mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use crate::boards::shared::Shared;
@@ -13,16 +12,11 @@ use crate::components::{
     interconnect,
     // debouncer,
     pcf8575,
-};
-
-use embedded_hal::digital::{
-    InputPin,
-    OutputPin
+    expander_reader,
 };
 
 use embassy_stm32::pac;
-use embassy_stm32::dma::NoDma;
-use embassy_stm32::i2c::{Error, I2c};
+use embassy_stm32::i2c::I2c;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, can, i2c, peripherals};
@@ -39,16 +33,9 @@ bind_interrupts!(struct I2CIrqs {
     I2C3_ER => i2c::ErrorInterruptHandler<peripherals::I2C3>;
 });
 
-use embassy_stm32::peripherals::I2C3;
-
-use embassy_stm32::mode::Async;
-use static_cell::StaticCell;
-static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2c<'static, Async>>> = StaticCell::new();
-// type BusProxy = shared_bus::I2cProxy<'static, shared_bus::NullMutex<I2c<'static, I2C3>>>;
-// type Expander = shared_bus::NullMutex<pcf8575::Driver<BusProxy>>;
-// type ExpanderPin = port_expander::Pin<'static, port_expander::mode::QuasiBidirectional, Expander>;
-// type Debouncer = debouncer::Debouncer<16, ExpanderPin>;
-
+type AsyncI2C = I2c<'static, embassy_stm32::mode::Async>;
+type SharedI2C = I2cDevice<'static, NoopRawMutex, AsyncI2C>;
+type ExpanderReader = expander_reader::ExpanderReader<SharedI2C>;
 
 /*
  * Hardware is shared between components and requires some internal mutability.
@@ -65,7 +52,7 @@ pub struct Hardware
     // pub outputs: RefCell<io::IOIndex<32, ExpanderPin>>,
     /// Handle physical switches - inputs.
     // pub debouncer: Debouncer,
-
+    pub expander_reader: ExpanderReader,
     // pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
     pub interconnect: interconnect::Interconnect,
 }
@@ -111,8 +98,8 @@ impl Hardware
             Default::default(),
         );
         // let i2c_bus = make_static!(NoopMutex::new(RefCell::new(i2c)));
-        let i2c_bus = Mutex::new(i2c);
-        let i2c_bus = I2C_BUS.init(i2c_bus);
+        let i2c_bus = make_static!(Mutex::new(i2c));
+        // let i2c_bus = I2C_BUS.init(i2c_bus);
 
         /* TODO: Assumption we have up to 3 expanders. One for outputs, one for inputs */
         // Inputs
@@ -122,12 +109,12 @@ impl Hardware
         // Unknown yet!
         // let exp3 = make_static!(Pcf8575::new(I2cDevice::new(i2c_bus), false, true, false));
 
+        let expander_reader = ExpanderReader::new(inputs, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
 
         /* TODO: The expander reading could be improved with INT and reading
          * multiple IOs at the time, but we need a caching layer so that the IOs
          * can still be properly abstracted
          */
-
 
         // let router = Router::new();
         // Salon, Dining room, Kitchen, Office, Hall, Garage, Terrace, Bathroom,
@@ -143,6 +130,7 @@ impl Hardware
             led: UnsafeCell::new(Output::new(p.PC6.degrade(), Level::Low, Speed::Low)),
             // outputs: RefCell::new(outputs),
             // debouncer,
+            expander_reader,
             interconnect,
         }
     }
@@ -166,9 +154,7 @@ impl Hardware
 
 
 /* Set of hardware tasks */
-/*
 #[embassy_executor::task(pool_size = 1)]
-pub async fn spawn_debouncer(debouncer: &'static Debouncer) {
-    debouncer.run().await;
+pub async fn spawn_readers(reader: &'static ExpanderReader) {
+    reader.run().await;
 }
-*/
