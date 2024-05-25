@@ -1,9 +1,14 @@
-use embedded_hal_02::digital::v2::{
+/*use embedded_hal_02::digital::v2::{
+    InputPin,
+    OutputPin
+};
+*/
+use embedded_hal::digital::{
     InputPin,
     OutputPin
 };
 
-use embassy_stm32::gpio::low_level::Pin as _;
+// use embassy_stm32::gpio::low_level::Pin as _;
 
 use embassy_stm32::gpio::{AnyPin, Input, Pull};
 

@@ -1,8 +1,7 @@
+/* WIP CONCEPT */
 
 use crate::boards::ctrl_board::Board;
-use crate::components::debouncer::{
-    SwitchState,
-};
+use crate::components::debouncer::SwitchState;
 
 /// App component parses inputs and turns them into various Actions
 pub struct IORouter {
@@ -53,8 +52,6 @@ impl IORouter {
         }
     }
 }
-
-
 
 
 #[embassy_executor::task(pool_size = 1)]

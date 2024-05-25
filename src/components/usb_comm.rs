@@ -119,7 +119,7 @@ impl UsbSerial {
 
         // Create embassy-usb DeviceBuilder using the driver and config.
         // It needs some buffers for building the descriptors.
-        let device_descriptor = make_static!([0; 256]);
+        // let device_descriptor = make_static!([0; 256]);
         let config_descriptor = make_static!([0; 256]);
         let bos_descriptor = make_static!([0; 256]);
         let control_buf = make_static!([0; 64]);
@@ -129,7 +129,7 @@ impl UsbSerial {
         let mut builder = Builder::new(
             driver,
             config,
-            device_descriptor,
+            // device_descriptor,
             config_descriptor,
             bos_descriptor,
             &mut [], /* msos descriptors */

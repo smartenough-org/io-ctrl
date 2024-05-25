@@ -1,7 +1,7 @@
 use core::cell::RefCell;
 use defmt::Format;
 use embassy_time::{Duration, Timer};
-use embedded_hal_02::digital::v2::{
+use embedded_hal::digital::{
     InputPin,
     OutputPin
 };
@@ -84,7 +84,9 @@ where
         const MIN_TIME: u16 = 2;
         const ACTIVE_LEVEL: bool = false;
 
+        /* Amount of time the switch is active */
         let mut state: [u16; N] = [0u16; N];
+
         loop {
             Timer::after(Duration::from_millis(LOOP_WAIT_MS.into())).await;
 
@@ -94,7 +96,7 @@ where
                 let value = inputs.get(idx);
 
                 if value == ACTIVE_LEVEL {
-                    /* Switch is pressed (maybe noise/contact bouncing) */
+                    /* Switch is pressed (or maybe noise/contact bouncing) */
                     if state[idx] != u16::max_value() {
                         state[idx] += 1;
                     }
@@ -117,7 +119,6 @@ where
                         /* Not yet active */
                         defmt::info!("active level state idx={} state={}", idx, state[idx]);
                     }
-
                 } else {
                     if state[idx] >= MIN_TIME {
                         /* Deactivated */
@@ -130,7 +131,6 @@ where
                     }
                     state[idx] = 0;
                     continue;
-
                 }
             }
         }
