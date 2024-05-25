@@ -5,27 +5,27 @@ use embassy_stm32::{pac, uid};
 use static_cell::make_static;
 
 use crate::boards::ctrl_board::Board;
-use crate::app::io_router;
+// use crate::app::io_router;
 
 pub struct CtrlApp
 {
     pub board: &'static Board,
 
-    pub io_router: &'static io_router::IORouter,
+    // pub io_router: &'static io_router::IORouter,
 }
 
 impl CtrlApp
 {
     pub fn new(board: &'static Board) -> Self {
-        let io_router = make_static!(io_router::IORouter::new(&board));
+        // let io_router = make_static!(io_router::IORouter::new(&board));
         Self {
-            io_router,
+            // io_router,
             board
         }
     }
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
-        unwrap!(spawner.spawn(io_router::task(&self.io_router)));
+        // unwrap!(spawner.spawn(io_router::task(&self.io_router)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
