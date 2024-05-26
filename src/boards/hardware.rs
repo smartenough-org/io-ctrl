@@ -11,6 +11,9 @@ use crate::components::{
     // io,
     interconnect,
     // debouncer,
+};
+
+use crate::io::{
     pcf8575,
     expander_reader,
 };
@@ -92,8 +95,6 @@ impl Hardware
             I2CIrqs,
             p.DMA1_CH6,
             p.DMA1_CH1,
-            // NoDma,
-            // NoDma,
             Hertz(400_000),
             Default::default(),
         );
@@ -106,8 +107,6 @@ impl Hardware
         let inputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), false, false, false);
         // Outputs
         let outputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
-        // Unknown yet!
-        // let exp3 = make_static!(Pcf8575::new(I2cDevice::new(i2c_bus), false, true, false));
 
         let expander_reader = ExpanderReader::new(inputs, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
 

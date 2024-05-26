@@ -13,5 +13,6 @@ pub mod intercom;
 pub mod status;
 */
 pub mod components;
+pub mod io;
 pub mod boards;
 pub mod app;
