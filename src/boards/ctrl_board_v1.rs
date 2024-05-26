@@ -55,7 +55,7 @@ impl Board {
 
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(interconnect::spawn(&self.hardware.interconnect)));
-        unwrap!(spawner.spawn(hardware::spawn_readers(&self.hardware.expander_reader)));
+        unwrap!(spawner.spawn(hardware::spawn_switches(&self.hardware.expander_switches)));
     }
 
     /// According to RM0440 (page 206)

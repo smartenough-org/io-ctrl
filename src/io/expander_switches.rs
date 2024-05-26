@@ -5,7 +5,7 @@ use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c::I2c;
 
 /// Read inputs (switches) and generate events.
-pub struct ExpanderReader<BUS: I2c> {
+pub struct ExpanderSwitches<BUS: I2c> {
     /// Indices of connceted PINs
     io_indices: [u8; 16],
 
@@ -16,7 +16,7 @@ pub struct ExpanderReader<BUS: I2c> {
     channel: events::InputEventChannel,
 }
 
-impl<BUS: I2c> ExpanderReader<BUS> {
+impl<BUS: I2c> ExpanderSwitches<BUS> {
     pub fn new(expander: Pcf8575<BUS>, io_indices: [u8; 16]) -> Self {
         Self {
             io_indices,

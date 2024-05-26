@@ -11,7 +11,7 @@ use crate::components::{
 };
 use embassy_stm32::gpio::{AnyPin, Level, Output, Pin, Pull, Speed};
 
-use crate::io::{expander_reader, pcf8575};
+use crate::io::{expander_switches, pcf8575};
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_stm32::i2c::I2c;
@@ -33,7 +33,7 @@ bind_interrupts!(struct I2CIrqs {
 
 type AsyncI2C = I2c<'static, embassy_stm32::mode::Async>;
 type SharedI2C = I2cDevice<'static, NoopRawMutex, AsyncI2C>;
-type ExpanderReader = expander_reader::ExpanderReader<SharedI2C>;
+type ExpanderSwitches = expander_switches::ExpanderSwitches<SharedI2C>;
 
 /*
  * Hardware is shared between components and requires some internal mutability.
@@ -48,7 +48,7 @@ pub struct Hardware {
     // pub outputs: RefCell<io::IOIndex<32, ExpanderPin>>,
     /// Handle physical switches - inputs.
     // pub debouncer: Debouncer,
-    pub expander_reader: ExpanderReader,
+    pub expander_switches: ExpanderSwitches,
     // pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
     pub interconnect: interconnect::Interconnect,
 }
@@ -97,7 +97,7 @@ impl Hardware {
         // Outputs
         let outputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
 
-        let expander_reader = ExpanderReader::new(
+        let expander_switches = ExpanderSwitches::new(
             inputs,
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
         );
@@ -121,7 +121,7 @@ impl Hardware {
             led: UnsafeCell::new(Output::new(p.PC6.degrade(), Level::Low, Speed::Low)),
             // outputs: RefCell::new(outputs),
             // debouncer,
-            expander_reader,
+            expander_switches,
             interconnect,
         }
     }
@@ -145,6 +145,6 @@ impl Hardware {
 
 /* Set of hardware tasks */
 #[embassy_executor::task(pool_size = 1)]
-pub async fn spawn_readers(reader: &'static ExpanderReader) {
-    reader.run().await;
+pub async fn spawn_switches(switches: &'static ExpanderSwitches) {
+    switches.run().await;
 }
