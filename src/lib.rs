@@ -5,6 +5,9 @@
 // For static_cell
 #![feature(type_alias_impl_trait)]
 
+// Adding/multiplying const expressions
+#![feature(generic_const_exprs)]
+
 /*
 TODO: Those two (USB, Intercom) are not A#
 pub mod usb_comm;

@@ -1,7 +1,7 @@
 /* WIP CONCEPT */
 
 use crate::boards::ctrl_board::Board;
-use crate::components::debouncer::SwitchState;
+use crate::io::events::{IoIdx, SwitchState};
 
 /// App component parses inputs and turns them into various Actions
 pub struct IORouter {
@@ -25,11 +25,12 @@ impl IORouter {
         /* All initially disabled (in low-state enabled devices) */
         let mut output_state: [bool; 16] = [true; 16];
         for n in 0..16 {
-            self.board.hardware.set_output(n, output_state[n]);
+            self.board.hardware.set_output(n as IoIdx, output_state[n]);
         }
 
         loop {
-            let event = self.board.hardware.debouncer.read_events().await;
+            // TODO: Wrap multiple expanders/native IOs into single queue.
+            let event = self.board.hardware.expander_switches.read_events().await;
             defmt::info!("Got some event {:?}", event);
 
             match event.state {
@@ -40,12 +41,12 @@ impl IORouter {
                     /* Ignoring long-held events yet */
                 }
                 SwitchState::Deactivated(ms) => {
-                    let switch = event.switch as usize;
                     if ms <= MAX_SHORT_MS {
                         /* Toggle correlated output */
-                        output_state[switch] = !output_state[switch];
-                        self.board.hardware.set_output(switch, output_state[switch]);
-                        defmt::info!("Set output {} to {}", switch, output_state[switch]);
+                        let switch_id = event.switch_id as usize;
+                        output_state[switch_id] = !output_state[switch_id];
+                        self.board.hardware.set_output(event.switch_id, output_state[switch_id]);
+                        defmt::info!("Set output {} to {}", switch_id, output_state[switch_id]);
                     }
                 }
             }

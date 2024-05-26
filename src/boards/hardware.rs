@@ -11,7 +11,7 @@ use crate::components::{
 };
 use embassy_stm32::gpio::{AnyPin, Level, Output, Pin, Pull, Speed};
 
-use crate::io::{expander_switches, pcf8575};
+use crate::io::{expander_switches, expander_outputs, indexed_outputs::IndexedOutputs, events::IoIdx, pcf8575};
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_stm32::i2c::I2c;
@@ -34,21 +34,25 @@ bind_interrupts!(struct I2CIrqs {
 type AsyncI2C = I2c<'static, embassy_stm32::mode::Async>;
 type SharedI2C = I2cDevice<'static, NoopRawMutex, AsyncI2C>;
 type ExpanderSwitches = expander_switches::ExpanderSwitches<SharedI2C>;
+type ExpanderOutputs = expander_outputs::ExpanderOutputs<SharedI2C>;
 
 /*
  * Hardware is shared between components and requires some internal mutability.
  */
 /// Represents our µC hardware interface.
-pub struct Hardware {
+pub(crate) struct Hardware {
     // ? UnsafeCell? For led maybe ok.
     led: UnsafeCell<Output<'static>>,
 
     /* FIXME: Would be better if all Refcells were private and accessible within a func-call */
     /// Handle physical outputs - relays, SSRs, etc.
     // pub outputs: RefCell<io::IOIndex<32, ExpanderPin>>,
+    // pub expander_outputs: ExpanderOutputs,
     /// Handle physical switches - inputs.
     // pub debouncer: Debouncer,
     pub expander_switches: ExpanderSwitches,
+
+    indexed_outputs: Mutex<NoopRawMutex, IndexedOutputs<1, 2, ExpanderOutputs, Output<'static>>>,
     // pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
     pub interconnect: interconnect::Interconnect,
 }
@@ -102,6 +106,8 @@ impl Hardware {
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
         );
 
+        let expander_outputs = ExpanderOutputs::new(outputs);
+
         /* TODO: The expander reading could be improved with INT and reading
          * multiple IOs at the time, but we need a caching layer so that the IOs
          * can still be properly abstracted
@@ -117,11 +123,21 @@ impl Hardware {
 
         // let debouncer = Debouncer::new(inputs);
 
+        let indexed_outputs = Mutex::new(IndexedOutputs::new(
+            [expander_outputs],
+            [Output::new(p.PB3, Level::High, Speed::Low),
+             Output::new(p.PB4, Level::High, Speed::Low)],
+            // IDs for outputs in order, starting with expander outputs.
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+             /* Native Pins start here */
+             17, 18],
+        ));
+
         Self {
             led: UnsafeCell::new(Output::new(p.PC6.degrade(), Level::Low, Speed::Low)),
             // outputs: RefCell::new(outputs),
-            // debouncer,
             expander_switches,
+            indexed_outputs,
             interconnect,
         }
     }
@@ -137,9 +153,8 @@ impl Hardware {
         led.set_low();
     }
 
-    pub fn set_output(&self, idx: usize, state: bool) {
-        // let mut outs = self.outputs.borrow_mut();
-        // outs.set(idx, state);
+    pub async fn set_output(&self, idx: IoIdx, state: bool) -> Result<(), ()> {
+        self.indexed_outputs.lock().await.set(idx, state).await
     }
 }
 
