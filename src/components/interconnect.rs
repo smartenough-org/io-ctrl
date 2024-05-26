@@ -1,15 +1,14 @@
 use core::cell::RefCell;
-use embassy_stm32::{peripherals, can, pac, uid};
-use embassy_time::{Duration, Timer};
 use defmt::info;
+use embassy_stm32::{can, pac, peripherals, uid};
+use embassy_time::{Duration, Timer};
 
 pub struct Interconnect
 //where
-    //I: can::Instance
+//I: can::Instance
 {
     // can: RefCell<can::Fdcan<'static, I, fdcan::NormalOperationMode>>,
 }
-
 
 impl Interconnect {
     pub fn new() -> Self {
@@ -23,8 +22,7 @@ impl Interconnect {
     }
     */
 
-    async fn run(&self) {
-    }
+    async fn run(&self) {}
 }
 
 /* Fixme, this should not depend on FDCAN1 */

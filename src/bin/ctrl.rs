@@ -2,14 +2,13 @@
 #![no_main]
 // Static cell
 #![feature(type_alias_impl_trait)]
-
 // TODO: Temporarily
 #![allow(unused_imports)]
 
 use {defmt_rtt as _, panic_probe as _};
 
-use static_cell::make_static;
 use embassy_executor::Spawner;
+use static_cell::make_static;
 
 use embassy_time::{Duration, Timer};
 

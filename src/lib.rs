@@ -2,7 +2,6 @@
 #![no_main]
 // TODO: Temporarily
 #![allow(unused_imports)]
-
 // For static_cell
 #![feature(type_alias_impl_trait)]
 
@@ -12,7 +11,7 @@ pub mod usb_comm;
 pub mod intercom;
 pub mod status;
 */
+pub mod app;
+pub mod boards;
 pub mod components;
 pub mod io;
-pub mod boards;
-pub mod app;

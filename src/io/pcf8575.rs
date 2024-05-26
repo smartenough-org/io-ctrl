@@ -2,8 +2,7 @@ use embedded_hal_async::i2c;
 
 /// Thin wrapper over PCF8575 module.
 /// TODO: Handle INT line and read only when triggered. Here... or layer higher?
-pub struct Pcf8575<BUS: i2c::I2c>
-{
+pub struct Pcf8575<BUS: i2c::I2c> {
     /// Shared i2c bus
     i2c: BUS,
 
@@ -11,14 +10,10 @@ pub struct Pcf8575<BUS: i2c::I2c>
     addr: u8,
 }
 
-impl<BUS: i2c::I2c> Pcf8575<BUS>
-{
+impl<BUS: i2c::I2c> Pcf8575<BUS> {
     pub fn new(i2c: BUS, a0: bool, a1: bool, a2: bool) -> Self {
         let addr = 0x20 | ((a2 as u8) << 2) | ((a1 as u8) << 1) | (a0 as u8);
-        Self {
-            i2c,
-            addr,
-        }
+        Self { i2c, addr }
     }
 
     /// Byte order: port 0 (P07-P00), port 1 (P17-P10)

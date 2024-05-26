@@ -1,12 +1,9 @@
+use super::status::{Message, Status};
 use core::cell::RefCell;
 use defmt::unwrap;
-use embassy_sync::{
-    pipe::Pipe,
-    blocking_mutex::raw::NoopRawMutex,
-};
 use embassy_futures::select::{select, Either};
+use embassy_sync::{blocking_mutex::raw::NoopRawMutex, pipe::Pipe};
 use embedded_io_async::{Read, Write};
-use super::status::{Message, Status};
 
 /* This is not a library. We will be using those in this crate only */
 #[allow(async_fn_in_trait)]
@@ -22,8 +19,7 @@ const CHUNK_SIZE: usize = 32;
 
 pub type InterPipe = Pipe<NoopRawMutex, CHUNK_SIZE>;
 
-pub struct UartIntercom<Uart: Read + Write>
-{
+pub struct UartIntercom<Uart: Read + Write> {
     iface: RefCell<Uart>,
     status: &'static Status,
 
@@ -31,8 +27,7 @@ pub struct UartIntercom<Uart: Read + Write>
     out_pipe: InterPipe,
 }
 
-impl<Uart: Read + Write> UartIntercom<Uart>
-{
+impl<Uart: Read + Write> UartIntercom<Uart> {
     pub fn new(iface: Uart, status: &'static Status) -> Self {
         Self {
             iface: RefCell::new(iface),
@@ -62,8 +57,12 @@ impl<Uart: Read + Write> UartIntercom<Uart>
                     // "Sender" should put a back-pressure on the USB sender.
                     // TODO: Proper protocol.
                     iface.write_all(&write_buf[..bytes]).await.ok();
-                    defmt::info!("Pushing {} bytes into pipe {:?}...", bytes, &write_buf[..bytes]);
-                },
+                    defmt::info!(
+                        "Pushing {} bytes into pipe {:?}...",
+                        bytes,
+                        &write_buf[..bytes]
+                    );
+                }
                 Either::Second(bytes) => {
                     // Got bytes from underlying inteface, pass to a pipe.
                     // This is allowed to DROP bytes if receiver doesn't read
@@ -75,10 +74,14 @@ impl<Uart: Read + Write> UartIntercom<Uart>
                     let write_bytes = core::cmp::min(bytes, free);
                     self.out_pipe.write_all(&read_buf[..write_bytes]).await;
                     if write_bytes < bytes {
-                        defmt::info!("USB PIPE FULL {}. DROPPING {}/{} bytes",
-                                     free, bytes - write_bytes, bytes);
+                        defmt::info!(
+                            "USB PIPE FULL {}. DROPPING {}/{} bytes",
+                            free,
+                            bytes - write_bytes,
+                            bytes
+                        );
                     }
-                },
+                }
             }
             self.status.set_state(Message::Transfer, 1).await;
         }

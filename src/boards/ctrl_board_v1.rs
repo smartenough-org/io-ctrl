@@ -1,27 +1,24 @@
 use embassy_stm32::{
-    usart,
-    time::mhz,
-    bind_interrupts,
+    bind_interrupts, flash,
+    gpio::{Level, Output, Pin as _, Speed},
     peripherals,
-    Config,
-    flash,
-    gpio::{Pin as _, Level, Output, Speed},
+    time::mhz,
+    usart, Config,
 };
 
 use embassy_stm32::pac;
 
-use embassy_executor::Spawner;
-use static_cell::make_static;
 use crate::boards::common;
 use crate::boards::hardware;
 use crate::boards::shared::Shared;
 use defmt::unwrap;
+use embassy_executor::Spawner;
+use static_cell::make_static;
 
 use crate::components::{
     interconnect,
     // debouncer,
 };
-
 
 // TODO Desc
 bind_interrupts!(struct Irqs {
@@ -53,10 +50,7 @@ impl Board {
         let shared: &'static Shared = make_static!(Shared::new());
         let hardware = hardware::Hardware::new(peripherals, shared);
 
-        Board {
-            hardware,
-            shared
-        }
+        Board { hardware, shared }
     }
 
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
