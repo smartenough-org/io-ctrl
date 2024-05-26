@@ -1,7 +1,5 @@
-
 /// TODO Do I need this?
-pub struct Shared {
-}
+pub struct Shared {}
 
 impl Default for Shared {
     fn default() -> Self {

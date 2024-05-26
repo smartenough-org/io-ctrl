@@ -1,7 +1,7 @@
-use defmt::info;
 use core::cell::RefCell;
-use embassy_time::{Instant, Duration, with_timeout};
+use defmt::info;
 use embassy_stm32::gpio::{AnyPin, Output};
+use embassy_time::{with_timeout, Duration, Instant};
 
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::channel::Channel;
@@ -20,9 +20,7 @@ pub enum Message {
 
 impl Message {
     fn to_time(&self) -> (Duration, Duration) {
-        let map_tuple = |(on, off)| {
-            (Duration::from_millis(on), Duration::from_millis(off))
-        };
+        let map_tuple = |(on, off)| (Duration::from_millis(on), Duration::from_millis(off));
         map_tuple(match self {
             Message::Init => (200, 200),
             Message::Idle => (50, 3000),
@@ -42,7 +40,7 @@ impl Default for MessageOrder {
     fn default() -> Self {
         MessageOrder {
             message: Message::Idle,
-            until: Instant::now()
+            until: Instant::now(),
         }
     }
 }
@@ -58,7 +56,7 @@ impl Status {
         let channel = Channel::<NoopRawMutex, MessageOrder, 3>::new();
         Status {
             led: RefCell::new(led),
-            channel
+            channel,
         }
     }
 
@@ -73,8 +71,13 @@ impl Status {
         let _ = self.channel.try_send(MessageOrder { message, until });
     }
 
-    async fn read_wait(&self, timeout: Duration,
-                       on_t: &mut Duration, off_t: &mut Duration, until: &mut Instant) {
+    async fn read_wait(
+        &self,
+        timeout: Duration,
+        on_t: &mut Duration,
+        off_t: &mut Duration,
+        until: &mut Instant,
+    ) {
         let result = with_timeout(timeout, self.channel.receive()).await;
         if let Ok(incoming) = result {
             // Data or timeout interrupted with data.
@@ -95,10 +98,12 @@ impl Status {
         let mut led = self.led.borrow_mut();
         loop {
             led.set_high();
-            self.read_wait(on_t, &mut on_t, &mut off_t, &mut until).await;
+            self.read_wait(on_t, &mut on_t, &mut off_t, &mut until)
+                .await;
 
             led.set_low();
-            self.read_wait(off_t, &mut on_t, &mut off_t, &mut until).await;
+            self.read_wait(off_t, &mut on_t, &mut off_t, &mut until)
+                .await;
 
             if Instant::now() > until {
                 (on_t, off_t) = Message::Idle.to_time();

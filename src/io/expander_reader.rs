@@ -1,12 +1,11 @@
+use crate::io::events;
+use crate::io::pcf8575::Pcf8575;
 use core::cell::RefCell;
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c::I2c;
-use crate::io::pcf8575::Pcf8575;
-use crate::io::events;
 
 /// Read inputs (switches) and generate events.
-pub struct ExpanderReader<BUS: I2c>
-{
+pub struct ExpanderReader<BUS: I2c> {
     /// Indices of connceted PINs
     io_indices: [u8; 16],
 
@@ -17,8 +16,7 @@ pub struct ExpanderReader<BUS: I2c>
     channel: events::InputEventChannel,
 }
 
-impl<BUS: I2c> ExpanderReader<BUS>
-{
+impl<BUS: I2c> ExpanderReader<BUS> {
     pub fn new(expander: Pcf8575<BUS>, io_indices: [u8; 16]) -> Self {
         Self {
             io_indices,
@@ -32,7 +30,7 @@ impl<BUS: I2c> ExpanderReader<BUS>
         let ret = self.channel.try_receive();
         match ret {
             Ok(event) => return Some(event),
-            Err(err) =>  {
+            Err(err) => {
                 defmt::info!("Error while reading channel {:?}", err);
                 return None;
             }
@@ -82,7 +80,7 @@ impl<BUS: I2c> ExpanderReader<BUS>
             };
 
             for idx in 0..16 {
-                let value = (bytes & (1<<idx)) != 0;
+                let value = (bytes & (1 << idx)) != 0;
 
                 if value == ACTIVE_LEVEL {
                     /* Switch is pressed (or maybe noise/contact bouncing) */
@@ -93,17 +91,21 @@ impl<BUS: I2c> ExpanderReader<BUS>
                     if state[idx] == MIN_TIME {
                         /* Just activated */
                         defmt::info!("ACTIVATED {}", idx);
-                        self.channel.send(events::SwitchEvent {
-                            switch_id: self.io_indices[idx],
-                            state: events::SwitchState::Activated,
-                        }).await;
+                        self.channel
+                            .send(events::SwitchEvent {
+                                switch_id: self.io_indices[idx],
+                                state: events::SwitchState::Activated,
+                            })
+                            .await;
                     } else if state[idx] > MIN_TIME {
                         /* Was activated and still is active */
                         let time_active = LOOP_WAIT_MS * (state[idx] as u32);
-                        self.channel.send(events::SwitchEvent {
-                            switch_id: self.io_indices[idx],
-                            state: events::SwitchState::Active(time_active),
-                        }).await;
+                        self.channel
+                            .send(events::SwitchEvent {
+                                switch_id: self.io_indices[idx],
+                                state: events::SwitchState::Active(time_active),
+                            })
+                            .await;
                     } else {
                         /* Not yet active */
                         defmt::info!("active level state idx={} state={}", idx, state[idx]);
@@ -113,10 +115,12 @@ impl<BUS: I2c> ExpanderReader<BUS>
                         /* Deactivated */
                         let time_active = LOOP_WAIT_MS * (state[idx] as u32);
                         defmt::info!("DEACTIVATED {} after {}ms", idx, time_active);
-                        self.channel.send(events::SwitchEvent {
-                            switch_id: self.io_indices[idx],
-                            state: events::SwitchState::Deactivated(time_active),
-                        }).await;
+                        self.channel
+                            .send(events::SwitchEvent {
+                                switch_id: self.io_indices[idx],
+                                state: events::SwitchState::Deactivated(time_active),
+                            })
+                            .await;
                     }
                     state[idx] = 0;
                     continue;

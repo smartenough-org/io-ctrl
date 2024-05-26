@@ -9,7 +9,7 @@ pub enum SwitchState {
     // Still active
     Active(u32),
     /// Released with a time it was pressed (in quantified ms)
-    Deactivated(u32)
+    Deactivated(u32),
 }
 
 /// Event transmitted over a channel

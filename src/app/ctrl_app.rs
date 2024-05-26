@@ -1,26 +1,23 @@
 use defmt::unwrap;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
 use embassy_stm32::{pac, uid};
+use embassy_time::{Duration, Timer};
 use static_cell::make_static;
 
 use crate::boards::ctrl_board::Board;
 // use crate::app::io_router;
 
-pub struct CtrlApp
-{
+pub struct CtrlApp {
     pub board: &'static Board,
-
     // pub io_router: &'static io_router::IORouter,
 }
 
-impl CtrlApp
-{
+impl CtrlApp {
     pub fn new(board: &'static Board) -> Self {
         // let io_router = make_static!(io_router::IORouter::new(&board));
         Self {
             // io_router,
-            board
+            board,
         }
     }
 
@@ -30,7 +27,6 @@ impl CtrlApp
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
         self.spawn_tasks(&spawner);
-
 
         defmt::info!("Starting app on chip {}", uid::uid());
         loop {

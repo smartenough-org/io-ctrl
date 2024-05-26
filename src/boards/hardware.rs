@@ -1,26 +1,21 @@
-use core::cell::{
-    UnsafeCell
-};
-use defmt::info;
-use embassy_sync::mutex::Mutex;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use crate::boards::shared::Shared;
+use core::cell::UnsafeCell;
+use defmt::info;
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::mutex::Mutex;
 
-use embassy_stm32::gpio::{Level, Output, AnyPin, Pin, Pull, Speed};
 use crate::components::{
     // io,
     interconnect,
     // debouncer,
 };
+use embassy_stm32::gpio::{AnyPin, Level, Output, Pin, Pull, Speed};
 
-use crate::io::{
-    pcf8575,
-    expander_reader,
-};
+use crate::io::{expander_reader, pcf8575};
 
-use embassy_stm32::pac;
-use embassy_stm32::i2c::I2c;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
+use embassy_stm32::i2c::I2c;
+use embassy_stm32::pac;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, can, i2c, peripherals};
 // use port_expander::{Pcf8575, dev::pcf8575, write_multiple};
@@ -44,13 +39,11 @@ type ExpanderReader = expander_reader::ExpanderReader<SharedI2C>;
  * Hardware is shared between components and requires some internal mutability.
  */
 /// Represents our µC hardware interface.
-pub struct Hardware
-{
+pub struct Hardware {
     // ? UnsafeCell? For led maybe ok.
     led: UnsafeCell<Output<'static>>,
 
     /* FIXME: Would be better if all Refcells were private and accessible within a func-call */
-
     /// Handle physical outputs - relays, SSRs, etc.
     // pub outputs: RefCell<io::IOIndex<32, ExpanderPin>>,
     /// Handle physical switches - inputs.
@@ -60,12 +53,8 @@ pub struct Hardware
     pub interconnect: interconnect::Interconnect,
 }
 
-impl Hardware
-{
-    pub fn new(
-        p: embassy_stm32::Peripherals,
-        _shared_resource: &'static Shared,
-    ) -> Self {
+impl Hardware {
+    pub fn new(p: embassy_stm32::Peripherals, _shared_resource: &'static Shared) -> Self {
         /* Initialize CAN */
         // let mut can = can::Fdcan::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
 
@@ -108,7 +97,10 @@ impl Hardware
         // Outputs
         let outputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
 
-        let expander_reader = ExpanderReader::new(inputs, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
+        let expander_reader = ExpanderReader::new(
+            inputs,
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        );
 
         /* TODO: The expander reading could be improved with INT and reading
          * multiple IOs at the time, but we need a caching layer so that the IOs
@@ -150,7 +142,6 @@ impl Hardware
         // outs.set(idx, state);
     }
 }
-
 
 /* Set of hardware tasks */
 #[embassy_executor::task(pool_size = 1)]

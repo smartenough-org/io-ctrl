@@ -1,20 +1,19 @@
-
+use super::{
+    intercom::Intercom,
+    status::{Message, Status},
+};
 use defmt::info;
+use embassy_futures::join::join;
+use embassy_futures::select::{select, Either};
+use embassy_stm32::peripherals::USB;
+use embassy_stm32::peripherals::{PA11, PA12};
 use embassy_stm32::usb::Driver;
 use embassy_stm32::{bind_interrupts, peripherals, usb};
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
-use embassy_stm32::peripherals::USB;
-use embassy_stm32::peripherals::{PA12, PA11};
 use embassy_usb::UsbDevice;
-use embassy_futures::join::join;
-use embassy_futures::select::{select, Either};
 use static_cell::make_static;
-use super::{
-    status::{Status, Message},
-    intercom::Intercom,
-};
 
 struct Disconnected;
 
@@ -34,14 +33,12 @@ type MyClass = CdcAcmClass<'static, MyDriver>;
 const MAX_PACKET_SIZE: u16 = 64;
 
 struct UsbProtocol {
-    status: &'static Status
+    status: &'static Status,
 }
 
 impl UsbProtocol {
     fn new(status: &'static Status) -> Self {
-        Self {
-            status
-        }
+        Self { status }
     }
 
     /// Connection spawner / manager.
@@ -58,7 +55,11 @@ impl UsbProtocol {
     }
 
     /// Connection handler
-    async fn forwarder(&self, class: &mut MyClass, intercom: &impl Intercom) -> Result<(), Disconnected> {
+    async fn forwarder(
+        &self,
+        class: &mut MyClass,
+        intercom: &impl Intercom,
+    ) -> Result<(), Disconnected> {
         let mut usb_buf = [0; 64];
         let mut ic_buf = [0; 64];
         loop {
@@ -73,7 +74,7 @@ impl UsbProtocol {
                     } else {
                         defmt::info!("Not ok!");
                     }
-                },
+                }
                 Either::Second(bytes) => {
                     defmt::info!("RX intercom -> TX USB {} {}", bytes, &ic_buf[..bytes]);
                     /* If == 64, then zero-length packet later could be required. */
@@ -96,10 +97,7 @@ bind_interrupts!(struct Irqs {
 });
 
 impl UsbSerial {
-    pub fn new(status: &'static Status,
-               usb_peripheral: USB,
-               dp: PA12,
-               dm: PA11) -> Self {
+    pub fn new(status: &'static Status, usb_peripheral: USB, dp: PA12, dm: PA11) -> Self {
         // TODO: Maybe pull dp down for reenumeration on flash?
 
         let driver = Driver::new(usb_peripheral, Irqs, dp, dm);
@@ -142,11 +140,7 @@ impl UsbSerial {
         // Build the builder.
         let usb = builder.build();
 
-        Self {
-            usb,
-            class,
-            status,
-        }
+        Self { usb, class, status }
     }
 
     pub async fn run(mut self, intercom: &impl Intercom) {

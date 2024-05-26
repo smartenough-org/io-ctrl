@@ -1,16 +1,17 @@
 use embassy_stm32::{
-    usart,
+    bind_interrupts,
+    gpio::{Level, Output, Pin as _, Speed},
+    peripherals,
     time::mhz,
     time::Hertz,
-    bind_interrupts,
-    peripherals,
-    Config,
-    gpio::{Pin as _, Level, Output, Speed}
+    usart, Config,
 };
 
 /// Chip specific clock configuration.
 pub fn config_stm32g4() -> Config {
-    use embassy_stm32::rcc::{Sysclk, Hsi48Config, mux, Hse, Pll, PllMul, PllQDiv, PllRDiv, PllPreDiv, PllSource, HseMode};
+    use embassy_stm32::rcc::{
+        mux, Hse, HseMode, Hsi48Config, Pll, PllMul, PllPreDiv, PllQDiv, PllRDiv, PllSource, Sysclk,
+    };
     let mut config = Config::default();
 
     // Change this to `false` to use the HSE clock source for the USB. This example assumes an 8MHz HSE.
@@ -38,7 +39,9 @@ pub fn config_stm32g4() -> Config {
     if USE_HSI48 {
         // Sets up the Clock Recovery System (CRS) to use the USB SOF to trim the HSI48 oscillator.
         config.rcc.mux.clk48sel = mux::Clk48sel::HSI48;
-        config.rcc.hsi48 = Some(Hsi48Config { sync_from_usb: true });
+        config.rcc.hsi48 = Some(Hsi48Config {
+            sync_from_usb: true,
+        });
     } else {
         // config.rcc.mux.clk48sel = mux::Clk48sel::Pll;
         // config.rcc.clock_48mhz_src = Some(Clock48MhzSrc::PllQ);
