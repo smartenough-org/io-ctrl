@@ -1,4 +1,4 @@
-use crate::io::events;
+use crate::io::events::{self, IoIdx};
 use crate::io::pcf8575::Pcf8575;
 use core::cell::RefCell;
 use embassy_time::{Duration, Timer};
@@ -6,8 +6,8 @@ use embedded_hal_async::i2c::I2c;
 
 /// Read inputs (switches) and generate events.
 pub struct ExpanderSwitches<BUS: I2c> {
-    /// Indices of connceted PINs
-    io_indices: [u8; 16],
+    /// Indices of connected PINs
+    io_indices: [IoIdx; 16],
 
     /// shared i2c bus
     expander: RefCell<Pcf8575<BUS>>,
@@ -17,7 +17,7 @@ pub struct ExpanderSwitches<BUS: I2c> {
 }
 
 impl<BUS: I2c> ExpanderSwitches<BUS> {
-    pub fn new(expander: Pcf8575<BUS>, io_indices: [u8; 16]) -> Self {
+    pub fn new(expander: Pcf8575<BUS>, io_indices: [IoIdx; 16]) -> Self {
         Self {
             io_indices,
             expander: RefCell::new(expander),
@@ -42,6 +42,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
         self.channel.receive().await
     }
 
+    /// Active scanner loop that observes the expander and generates events when input changes.
     pub async fn run(&self) -> ! {
         /*
          * Let's start with a generic NO switches. So we set outputs to HIGH and
