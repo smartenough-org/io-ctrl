@@ -23,9 +23,9 @@ impl IORouter {
         const MAX_SHORT_MS: u32 = 300;
 
         /* All initially disabled (in low-state enabled devices) */
-        let mut output_state: [bool; 16] = [true; 16];
-        for n in 0..16 {
-            self.board.hardware.set_output(n as IoIdx, output_state[n]);
+        let mut output_state: [bool; 32] = [true; 32];
+        for n in 1..=16 {
+            self.board.hardware.set_output(n as IoIdx, output_state[n]).await.unwrap();
         }
 
         loop {
@@ -45,7 +45,7 @@ impl IORouter {
                         /* Toggle correlated output */
                         let switch_id = event.switch_id as usize;
                         output_state[switch_id] = !output_state[switch_id];
-                        self.board.hardware.set_output(event.switch_id, output_state[switch_id]);
+                        self.board.hardware.set_output(event.switch_id, output_state[switch_id]).await.unwrap();
                         defmt::info!("Set output {} to {}", switch_id, output_state[switch_id]);
                     }
                 }

@@ -50,7 +50,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
          */
         let mut expander = self.expander.borrow_mut();
 
-        defmt::info!("Starting debouncer");
+        defmt::info!("Starting expander scanning loop");
 
         // Initialize pins to outputs.
         expander.write(0xffff).await.unwrap();

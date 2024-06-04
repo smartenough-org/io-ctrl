@@ -97,9 +97,10 @@ impl Hardware {
 
         /* TODO: Assumption we have up to 3 expanders. One for outputs, one for inputs */
         // Inputs
-        let inputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), false, false, false);
+        let inputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
+
         // Outputs
-        let outputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
+        let outputs= pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), false, false, false);
 
         let expander_switches = ExpanderSwitches::new(
             inputs,
@@ -154,6 +155,7 @@ impl Hardware {
     }
 
     pub async fn set_output(&self, idx: IoIdx, state: bool) -> Result<(), ()> {
+        // TODO: Try few times; count errors; panic after some threshold.
         self.indexed_outputs.lock().await.set(idx, state).await
     }
 }
