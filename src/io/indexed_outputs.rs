@@ -19,6 +19,8 @@ where
 {
     /// Create new indexed output mapping with few expanders (16 IOs each) and any number of native Pins.
     /// Passed indices list maps any numeric ID to each of the PINs.
+    //
+    // MAYBE: Make indices tuple to index into native-0, or expander ID.
     pub fn new(grouped: [ET; EN], native: [P; NN], indices: [u8; EN * 16 + NN]) -> Self {
         IndexedOutputs {
             grouped,
@@ -50,28 +52,32 @@ where
                     self.native[native_pos].set_low().unwrap();
                 }
                 return Ok(());
+            } else {
+                let expander = &mut self.grouped[expander_no];
+                let io_within = position - expander_no * 16;
+                if io_within >= 16 {
+                    defmt::panic!("Calculated IO within expander is invalid");
+                }
+                let io_within = io_within as u8;
+                if high {
+                    expander.set_high(io_within).await.unwrap();
+                } else {
+                    expander.set_low(io_within).await.unwrap();
+                }
             }
+
             Ok(())
         } else {
             defmt::error!("Unable to find output with ID {}", io_idx);
             Err(())
         }
-
-        /*
-        for pin_idx in 0..16 {
-            if self.io_indices[pin_idx] == io_idx {
-                // Found Io IDX at pin_idx
-                return 1 << pin_idx;
-            }
-        }
-        */
     }
 
-    async fn set_high(&mut self, idx: IoIdx) -> Result<(), ()> {
+    pub async fn set_high(&mut self, idx: IoIdx) -> Result<(), ()> {
         self.set(idx, true).await
     }
 
-    async fn set_low(&mut self, idx: IoIdx) -> Result<(), ()> {
+    pub async fn set_low(&mut self, idx: IoIdx) -> Result<(), ()> {
         self.set(idx, false).await
     }
 }
