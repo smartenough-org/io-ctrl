@@ -17,4 +17,5 @@ pub mod status;
 pub mod app;
 pub mod boards;
 pub mod components;
+pub mod buttonsmash;
 pub mod io;
