@@ -33,6 +33,6 @@ pub async fn main(spawner: Spawner) {
     // Start board tasks.
     board.spawn_tasks(&spawner);
 
-    let app = make_static!(CtrlApp::new(board));
+    let app = make_static!(CtrlApp::new(board).await);
     app.main(&spawner).await;
 }

@@ -59,6 +59,7 @@ where
                     defmt::panic!("Calculated IO within expander is invalid");
                 }
                 let io_within = io_within as u8;
+                // TODO: This unwrap will kill program if there's no IO to be set (no PCF)
                 if high {
                     expander.set_high(io_within).await.unwrap();
                 } else {

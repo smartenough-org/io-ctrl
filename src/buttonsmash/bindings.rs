@@ -1,5 +1,6 @@
 use defmt::{Format, unwrap, info, error};
 use super::consts::*;
+use crate::io::events::Trigger;
 use defmt;
 
 /// An action that a button can be mapped to.
