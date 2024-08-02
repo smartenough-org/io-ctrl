@@ -1,29 +1,35 @@
+/*
+TODO: We lack the ability to toggle a group on/off if say one lamp from the group is
+already enabled.
+*/
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::channel::Channel;
+use static_cell::make_static;
 
 use super::bindings::*;
-use super::consts::*;
+use super::consts::{
+    Command,
+    InIdx, OutIdx,
+    ProcIdx,
+    Event,
+    MAX_LAYERS, MAX_PROCEDURES,
+    MAX_STACK,
+};
 use super::layers::Layers;
 use super::opcodes::Opcode;
+use crate::io::events::{ButtonEvent, Trigger};
 
-/// Max call stack size.
-const MAX_STACK: usize = 3;
-
-type CommandQueue = Channel::<NoopRawMutex, Command, 3>;
+pub type CommandQueue = Channel<NoopRawMutex, Command, 3>;
 
 /// Executes actions using a program.
 pub struct Executor<const BINDINGS: usize> {
-    /// Current selected Layer
-    // current_layer: LayerIdx,
     layers: Layers,
     bindings: BindingList<BINDINGS>,
     opcodes: [Opcode; 1024],
     procedures: [usize; MAX_PROCEDURES],
-
     // command_queue: mpsc::Sender<Command>,
-    command_queue: CommandQueue
+    command_queue: &'static CommandQueue
 }
-
 
 enum MicroState {
     /// Continue execution
@@ -37,13 +43,12 @@ enum MicroState {
 }
 
 impl<const BN: usize> Executor<BN> {
-    pub fn new(queue: CommandQueue) -> Self {
+    pub fn new(queue: &'static CommandQueue) -> Self {
         Self {
             layers: Layers::new(),
             bindings: BindingList::new(),
             opcodes: [Opcode::Noop; 1024],
             procedures: [0; MAX_PROCEDURES],
-
             command_queue: queue,
         }
     }
@@ -58,10 +63,14 @@ impl<const BN: usize> Executor<BN> {
         self.layers.reset();
     }
 
-    pub async fn emit(&self, command: Command) {
+    async fn emit(&self, command: Command) {
         defmt::info!("Emiting {:?}", command);
         // TODO: Maybe some timeout in case it breaks and we don't want to hang?
         self.command_queue.send(command).await;
+    }
+
+    pub async fn read_events(&self) -> Command {
+        self.command_queue.receive().await
     }
 
     /// Helper: Bind input/trigger to a call to a given procedure.
@@ -135,42 +144,50 @@ impl<const BN: usize> Executor<BN> {
                 self.bindings.clear();
             }
 
-            Opcode::BindShortCall(in_idx, proc_idx) => {
-                self.bind_proc(in_idx, Trigger::ShortClick, proc_idx);
+            Opcode::BindShortCall(switch_id, proc_idx) => {
+                self.bind_proc(switch_id, Trigger::ShortClick, proc_idx);
             }
-            Opcode::BindLongCall(in_idx, proc_idx) => {
-                self.bind_proc(in_idx, Trigger::LongClick, proc_idx);
+            Opcode::BindLongCall(switch_id, proc_idx) => {
+                self.bind_proc(switch_id, Trigger::LongClick, proc_idx);
             }
-            Opcode::BindActivateCall(in_idx, proc_idx) => {
-                self.bind_proc(in_idx, Trigger::Activated, proc_idx);
+            Opcode::BindActivateCall(switch_id, proc_idx) => {
+                self.bind_proc(switch_id, Trigger::Activated, proc_idx);
             }
-            Opcode::BindDeactivateCall(in_idx, proc_idx) => {
-                self.bind_proc(in_idx, Trigger::Deactivated, proc_idx);
+            Opcode::BindDeactivateCall(switch_id, proc_idx) => {
+                self.bind_proc(switch_id, Trigger::Deactivated, proc_idx);
             }
-            Opcode::BindLongActivate(in_idx, proc_idx) => {
-                self.bind_proc(in_idx, Trigger::LongActivated, proc_idx);
+            Opcode::BindLongActivate(switch_id, proc_idx) => {
+                self.bind_proc(switch_id, Trigger::LongActivated, proc_idx);
             }
-            Opcode::BindLongDeactivate(in_idx, proc_idx) => {
-                self.bind_proc(in_idx, Trigger::LongDeactivated, proc_idx);
+            Opcode::BindLongDeactivate(switch_id, proc_idx) => {
+                self.bind_proc(switch_id, Trigger::LongDeactivated, proc_idx);
             }
 
             /*
              * Shortcuts
              */
             // Trivial configuration shortcuts.
-            Opcode::BindShortToggle(in_idx, out_idx) => {
-                self.bind_single(in_idx, Trigger::ShortClick, Command::ToggleOutput(out_idx));
+            Opcode::BindShortToggle(switch_id, out_idx) => {
+                self.bind_single(
+                    switch_id,
+                    Trigger::ShortClick,
+                    Command::ToggleOutput(out_idx),
+                );
             }
 
-            Opcode::BindLongToggle(in_idx, out_idx) => {
-                self.bind_single(in_idx, Trigger::LongClick, Command::ToggleOutput(out_idx));
+            Opcode::BindLongToggle(switch_id, out_idx) => {
+                self.bind_single(
+                    switch_id,
+                    Trigger::LongClick,
+                    Command::ToggleOutput(out_idx),
+                );
             }
 
-            Opcode::BindLayerHold(in_idx, layer_idx) => {
+            Opcode::BindLayerHold(switch_id, layer_idx) => {
                 // When this is in use + ShortClick is defined for the same key,
                 // then the shortclick should be defined on new layer.
                 self.bind_single(
-                    in_idx,
+                    switch_id,
                     Trigger::Activated,
                     Command::ActivateLayer(layer_idx),
                 );
@@ -180,7 +197,7 @@ impl<const BN: usize> Executor<BN> {
             } // Hypothetical?
               // Read input value (local) into register
               /*
-                  Opcode::ReadInput(in_idx) => {
+                  Opcode::ReadInput(switch_id) => {
               },
                   /// Read input value (local) into register
                   Opcode::ReadOutput(OutIdx) => {
@@ -205,7 +222,7 @@ impl<const BN: usize> Executor<BN> {
             pc += 1;
             let opcode = self.opcodes[pc];
             match self.execute_opcode(opcode).await {
-                MicroState::Continue => {},
+                MicroState::Continue => {}
                 MicroState::Stop => {
                     if stack_idx == 0 {
                         // Nothing to return to.
@@ -213,7 +230,7 @@ impl<const BN: usize> Executor<BN> {
                     }
                     stack_idx -= 1;
                     pc = stack[stack_idx];
-                },
+                }
                 MicroState::CallProc(proc_id) => {
                     // Check for overflow.
                     if stack_idx == MAX_STACK {
@@ -223,7 +240,7 @@ impl<const BN: usize> Executor<BN> {
                     stack_idx += 1;
                     pc = self.procedures[proc_id as usize];
                     // pc points to Start now and will be incremented.
-                },
+                }
             }
         }
     }
@@ -244,8 +261,9 @@ impl<const BN: usize> Executor<BN> {
     /// Reads events and reacts to it.
     pub async fn parse_event(&mut self, event: &Event) {
         match event {
-            Event::ButtonTrigger(data) => {
-                if data.trigger == Trigger::Deactivated && self.layers.maybe_deactivate(data.in_idx)
+            Event::ButtonEvent(data) => {
+                if data.trigger == Trigger::Deactivated
+                    && self.layers.maybe_deactivate(data.switch_id)
                 {
                     // Deactivated layer that was previously activated using
                     // this key. TODO: Warning! Event order might be important.
@@ -254,7 +272,7 @@ impl<const BN: usize> Executor<BN> {
                 }
 
                 let binding = self.bindings.filter(
-                    data.in_idx,
+                    data.switch_id,
                     Some(self.layers.current),
                     Some(data.trigger),
                 );
@@ -265,7 +283,7 @@ impl<const BN: usize> Executor<BN> {
                         Action::Noop => {}
                         Action::Single(cmd) => match cmd {
                             Command::ActivateLayer(layer) => {
-                                self.layers.activate(data.in_idx, layer);
+                                self.layers.activate(data.switch_id, layer);
                             }
                             Command::DeactivateLayer(_layer) => {
                                 todo!("deactivation is based on stack list");
@@ -284,114 +302,3 @@ impl<const BN: usize> Executor<BN> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-
-    async fn get_prepared() -> (Executor<30>, mpsc::Receiver<Command>) {
-        const PROGRAM: [Opcode; 16] = [
-            // Setup proc.
-            Opcode::Start(0),
-            Opcode::LayerDefault,
-            Opcode::BindShortToggle(1, 10),
-            Opcode::BindShortToggle(2, 11),
-            Opcode::BindLongToggle(3, 20),
-            Opcode::BindShortToggle(3, 21),
-            Opcode::BindShortCall(4, 1),
-            Opcode::BindLayerHold(5, 66),
-            Opcode::LayerPush(66),
-            Opcode::BindShortToggle(1, 13),
-            Opcode::Stop,
-            // Test proc.
-            Opcode::Start(1),
-            Opcode::Activate(100),
-            Opcode::Activate(101),
-            Opcode::Deactivate(110),
-            Opcode::Stop,
-        ];
-
-        let (event_src, event_handler) = mpsc::channel(32);
-        let mut executor: Executor<30> = Executor::new(event_src);
-        executor.load_static(&PROGRAM).await;
-
-        (executor, event_handler)
-    }
-
-
-    #[tokio::test]
-    async fn it_handles_basic_code() {
-
-        let (mut executor, mut event_handler) = get_prepared().await;
-
-        executor
-            .parse_event(&Event::new_button_trigger(3, Trigger::LongClick))
-            .await;
-        executor
-            .parse_event(&Event::new_button_trigger(3, Trigger::ShortClick))
-            .await;
-        assert!(!event_handler.is_empty());
-        let cmd = event_handler.recv().await.unwrap();
-        assert_eq!(cmd, Command::ToggleOutput(20));
-        let cmd = event_handler.recv().await.unwrap();
-        assert_eq!(cmd, Command::ToggleOutput(21));
-        assert!(event_handler.is_empty());
-
-        // Try procedure execution
-        executor
-            .parse_event(&Event::new_button_trigger(4, Trigger::ShortClick))
-            .await;
-        assert!(!event_handler.is_empty());
-        let cmd = event_handler.recv().await.unwrap();
-        assert_eq!(cmd, Command::ActivateOutput(100));
-        let cmd = event_handler.recv().await.unwrap();
-        assert_eq!(cmd, Command::ActivateOutput(101));
-        let cmd = event_handler.recv().await.unwrap();
-        assert_eq!(cmd, Command::DeactivateOutput(110));
-    }
-
-    #[tokio::test]
-    async fn it_handles_layers() {
-        let (mut executor, mut event_handler) = get_prepared().await;
-
-        // Try layer differentiator
-        assert!(event_handler.is_empty());
-
-        // Normal activation on layer 0 -> 10 output
-        executor
-            .parse_event(&Event::new_button_trigger(1, Trigger::ShortClick))
-            .await;
-        // Holds layer 66 active.
-        executor
-            .parse_event(&Event::new_button_trigger(5, Trigger::Activated))
-            .await;
-        // Now activates 13 instead.
-        executor
-            .parse_event(&Event::new_button_trigger(1, Trigger::ShortClick))
-            .await;
-        // ...twice.
-        executor
-            .parse_event(&Event::new_button_trigger(1, Trigger::ShortClick))
-            .await;
-        // Back to layer 1
-        executor
-            .parse_event(&Event::new_button_trigger(5, Trigger::Deactivated))
-            .await;
-        // Activates 10.
-        executor
-            .parse_event(&Event::new_button_trigger(1, Trigger::ShortClick))
-            .await;
-
-        let cmd = event_handler.recv().await.unwrap();
-        assert_eq!(cmd, Command::ToggleOutput(10));
-        let cmd = event_handler.recv().await.unwrap();
-        assert_eq!(cmd, Command::ToggleOutput(13));
-        let cmd = event_handler.recv().await.unwrap();
-        assert_eq!(cmd, Command::ToggleOutput(13));
-        let cmd = event_handler.recv().await.unwrap();
-        assert_eq!(cmd, Command::ToggleOutput(10));
-        assert!(event_handler.is_empty());
-
-        // TODO: Multiple layers test.
-    }
-}

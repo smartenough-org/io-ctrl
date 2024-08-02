@@ -17,7 +17,6 @@ use static_cell::make_static;
 
 use crate::components::{
     interconnect,
-    // debouncer,
 };
 
 // TODO Desc
@@ -56,6 +55,7 @@ impl Board {
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(interconnect::spawn(&self.hardware.interconnect)));
         unwrap!(spawner.spawn(hardware::spawn_switches(&self.hardware.expander_switches)));
+        unwrap!(spawner.spawn(hardware::spawn_event_converter(&self.hardware.event_converter)));
     }
 
     /// According to RM0440 (page 206)

@@ -1,4 +1,7 @@
-use crate::io::events::{self, IoIdx};
+use crate::io::{
+    events::{self, IoIdx},
+    event_converter::EventConverter,
+};
 use crate::io::pcf8575::Pcf8575;
 use core::cell::RefCell;
 use embassy_time::{Duration, Timer};
@@ -12,34 +15,19 @@ pub struct ExpanderSwitches<BUS: I2c> {
     /// shared i2c bus
     expander: RefCell<Pcf8575<BUS>>,
 
-    // Internal comm channel
-    channel: events::InputEventChannel,
+    // Converter reads our events and produces high-level combined events.
+    event_converter: &'static EventConverter,
 }
 
 impl<BUS: I2c> ExpanderSwitches<BUS> {
-    pub fn new(expander: Pcf8575<BUS>, io_indices: [IoIdx; 16]) -> Self {
+    pub fn new(expander: Pcf8575<BUS>, io_indices: [IoIdx; 16],
+               event_converter: &'static EventConverter) -> Self {
         Self {
             io_indices,
             expander: RefCell::new(expander),
-            channel: events::InputEventChannel::new(),
+            event_converter,
+            // channel: events::InputEventChannel::new(),
         }
-    }
-
-    /// Used by external readers
-    pub fn try_read_events(&self) -> Option<events::SwitchEvent> {
-        let ret = self.channel.try_receive();
-        match ret {
-            Ok(event) => return Some(event),
-            Err(err) => {
-                defmt::info!("Error while reading channel {:?}", err);
-                return None;
-            }
-        }
-    }
-
-    /// Used by external readers.
-    pub async fn read_events(&self) -> events::SwitchEvent {
-        self.channel.receive().await
     }
 
     /// Active scanner loop that observes the expander and generates events when input changes.
@@ -92,7 +80,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                     if state[idx] == MIN_TIME {
                         /* Just activated */
                         defmt::info!("ACTIVATED {}", idx);
-                        self.channel
+                        self.event_converter
                             .send(events::SwitchEvent {
                                 switch_id: self.io_indices[idx],
                                 state: events::SwitchState::Activated,
@@ -101,7 +89,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                     } else if state[idx] > MIN_TIME {
                         /* Was activated and still is active */
                         let time_active = LOOP_WAIT_MS * (state[idx] as u32);
-                        self.channel
+                        self.event_converter
                             .send(events::SwitchEvent {
                                 switch_id: self.io_indices[idx],
                                 state: events::SwitchState::Active(time_active),
@@ -113,10 +101,10 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                     }
                 } else {
                     if state[idx] >= MIN_TIME {
-                        /* Deactivated */
+                        /* Was active, now it just got deactivated */
                         let time_active = LOOP_WAIT_MS * (state[idx] as u32);
                         defmt::info!("DEACTIVATED {} after {}ms", idx, time_active);
-                        self.channel
+                        self.event_converter
                             .send(events::SwitchEvent {
                                 switch_id: self.io_indices[idx],
                                 state: events::SwitchState::Deactivated(time_active),

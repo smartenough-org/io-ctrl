@@ -19,7 +19,7 @@ embedded-hal = { version = "1.0.0" }
 embedded-io-async = { version = "0.6.1" }
 embassy-embedded-hal = { version = "0.1.0" }
 
-embassy-executor = { version = "0.5.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
+embassy-executor = { version = "0.5.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers", "task-arena-size-8192"] }
 
 # Additional
 embassy-usb = { version = "0.2.0", features = ["defmt", "max-interface-count-3"] }

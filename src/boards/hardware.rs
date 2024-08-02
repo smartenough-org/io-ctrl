@@ -11,7 +11,12 @@ use crate::components::{
 };
 use embassy_stm32::gpio::{AnyPin, Level, Output, Pin, Pull, Speed};
 
-use crate::io::{expander_switches, expander_outputs, indexed_outputs::IndexedOutputs, events::IoIdx, pcf8575};
+use crate::io::{
+    expander_switches,
+    expander_outputs,
+    event_converter::EventConverter,
+    indexed_outputs::IndexedOutputs, events::IoIdx, pcf8575
+};
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_stm32::i2c::I2c;
@@ -51,6 +56,8 @@ pub(crate) struct Hardware {
     /// Handle physical switches - inputs.
     // pub debouncer: Debouncer,
     pub expander_switches: ExpanderSwitches,
+
+    pub event_converter: &'static EventConverter,
 
     indexed_outputs: Mutex<NoopRawMutex, IndexedOutputs<1, 2, ExpanderOutputs, Output<'static>>>,
     // pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
@@ -95,34 +102,22 @@ impl Hardware {
         let i2c_bus = make_static!(Mutex::new(i2c));
         // let i2c_bus = I2C_BUS.init(i2c_bus);
 
+        let event_converter = make_static!(EventConverter::new());
+
         /* TODO: Assumption we have up to 3 expanders. One for outputs, one for inputs */
         // Inputs
         let inputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
 
         // Outputs
-        let outputs= pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), false, false, false);
+        let outputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), false, false, false);
 
         let expander_switches = ExpanderSwitches::new(
             inputs,
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+            event_converter,
         );
 
         let expander_outputs = ExpanderOutputs::new(outputs);
-
-        /* TODO: The expander reading could be improved with INT and reading
-         * multiple IOs at the time, but we need a caching layer so that the IOs
-         * can still be properly abstracted
-         */
-
-        // let router = Router::new();
-        // Salon, Dining room, Kitchen, Office, Hall, Garage, Terrace, Bathroom,
-
-        /*
-        let size = core::mem::size_of::<io::Inputs<32, ExpanderPin>>();
-        defmt::info!("Size of inputs is {}", size);
-        */
-
-        // let debouncer = Debouncer::new(inputs);
 
         let indexed_outputs = Mutex::new(IndexedOutputs::new(
             [expander_outputs],
@@ -140,6 +135,9 @@ impl Hardware {
             expander_switches,
             indexed_outputs,
             interconnect,
+
+            // TODO: This is not a hardware.
+            event_converter,
         }
     }
 
@@ -165,3 +163,11 @@ impl Hardware {
 pub async fn spawn_switches(switches: &'static ExpanderSwitches) {
     switches.run().await;
 }
+
+#[embassy_executor::task(pool_size = 1)]
+pub async fn spawn_event_converter(ec: &'static EventConverter) {
+    ec.run().await;
+}
+
+
+
