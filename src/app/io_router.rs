@@ -1,10 +1,7 @@
-use core::cell::UnsafeCell;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::channel::Channel;
 
-use crate::buttonsmash::{Opcode, CommandQueue, Event, Command};
+use crate::buttonsmash::{CommandQueue, Command};
 use crate::boards::ctrl_board::Board;
-use crate::io::events::{IoIdx, ButtonEvent, Trigger};
+use crate::io::events::IoIdx;
 
 /// App component parses inputs and turns them into various Actions
 pub struct IORouter {

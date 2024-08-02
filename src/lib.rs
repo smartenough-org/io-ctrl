@@ -2,8 +2,6 @@
 #![no_main]
 // TODO: Temporarily
 #![allow(unused_imports)]
-// For static_cell
-#![feature(type_alias_impl_trait)]
 
 // Adding/multiplying const expressions
 #![feature(generic_const_exprs)]

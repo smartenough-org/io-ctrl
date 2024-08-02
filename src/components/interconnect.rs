@@ -1,8 +1,3 @@
-use core::cell::RefCell;
-use defmt::info;
-use embassy_stm32::{can, pac, peripherals, uid};
-use embassy_time::{Duration, Timer};
-
 pub struct Interconnect
 //where
 //I: can::Instance

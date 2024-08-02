@@ -8,7 +8,7 @@ use embassy_sync::channel::Channel;
 use super::bindings::*;
 use super::consts::{
     Command,
-    InIdx, OutIdx,
+    InIdx,
     ProcIdx,
     Event,
     MAX_LAYERS, MAX_PROCEDURES,
@@ -16,7 +16,7 @@ use super::consts::{
 };
 use super::layers::Layers;
 use super::opcodes::Opcode;
-use crate::io::events::{ButtonEvent, Trigger};
+use crate::io::events::Trigger;
 
 pub type CommandQueue = Channel<NoopRawMutex, Command, 3>;
 

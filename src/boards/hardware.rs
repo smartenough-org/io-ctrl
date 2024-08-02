@@ -9,7 +9,7 @@ use crate::components::{
     interconnect,
     // debouncer,
 };
-use embassy_stm32::gpio::{AnyPin, Level, Output, Pin, Pull, Speed};
+use embassy_stm32::gpio::{Level, Output, Pin, Speed};
 
 use crate::io::{
     expander_switches,

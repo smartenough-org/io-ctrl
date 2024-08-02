@@ -1,4 +1,3 @@
-use embassy_stm32::gpio::{AnyPin, Level, Output, Pin, Speed};
 use embedded_hal::digital::OutputPin;
 use crate::io::events::{IoIdx, GroupedOutputs};
 

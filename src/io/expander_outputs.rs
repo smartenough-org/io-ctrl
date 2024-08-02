@@ -1,7 +1,5 @@
 use crate::io::events::GroupedOutputs;
 use crate::io::pcf8575::Pcf8575;
-use core::cell::RefCell;
-use embassy_time::{Duration, Timer};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_hal_async::i2c::I2c;
