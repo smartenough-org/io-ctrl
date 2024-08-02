@@ -1,4 +1,4 @@
-use defmt::{Format, unwrap, info, error};
+use defmt::Format;
 
 use crate::io::events::{Trigger, ButtonEvent};
 

@@ -1,9 +1,6 @@
 use embassy_stm32::{
-    bind_interrupts, flash,
-    gpio::{Level, Output, Pin as _, Speed},
-    peripherals,
-    time::mhz,
-    usart, Config,
+    bind_interrupts, peripherals,
+    usart,
 };
 
 use embassy_stm32::pac;

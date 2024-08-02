@@ -1,10 +1,6 @@
 use embassy_stm32::{
-    bind_interrupts,
-    gpio::{Level, Output, Pin as _, Speed},
-    peripherals,
-    time::mhz,
     time::Hertz,
-    usart, Config,
+    Config,
 };
 
 /// Chip specific clock configuration.

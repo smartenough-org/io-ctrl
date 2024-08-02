@@ -2,7 +2,7 @@ use core::cell::UnsafeCell;
 
 use defmt::unwrap;
 use embassy_executor::Spawner;
-use embassy_stm32::{pac, uid};
+use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
 use static_cell::StaticCell;
 
