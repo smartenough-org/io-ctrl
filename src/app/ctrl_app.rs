@@ -4,7 +4,7 @@ use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_stm32::{pac, uid};
 use embassy_time::{Duration, Timer};
-use static_cell::make_static;
+use static_cell::StaticCell;
 
 use crate::boards::ctrl_board::Board;
 use crate::app::io_router;
@@ -12,6 +12,10 @@ use crate::buttonsmash::consts::BINDINGS_COUNT;
 use crate::buttonsmash::{CommandQueue, Event, Executor, Opcode};
 
 use crate::app::io_router::IORouter;
+
+// Statics
+static CMD_QUEUE: StaticCell<CommandQueue> = StaticCell::new();
+static IO_ROUTER: StaticCell<io_router::IORouter> = StaticCell::new();
 
 pub struct CtrlApp {
     pub board: &'static Board,
@@ -24,11 +28,11 @@ pub struct CtrlApp {
 
 impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
-        let cmd_queue = make_static!(CommandQueue::new());
+        let cmd_queue = CMD_QUEUE.init(CommandQueue::new());
         let mut executor = Executor::new(cmd_queue);
         Self::configure(&mut executor).await;
 
-        let io_router = make_static!(io_router::IORouter::new(&board, cmd_queue));
+        let io_router = IO_ROUTER.init(io_router::IORouter::new(board, cmd_queue));
         Self {
             io_router,
             board,
@@ -87,14 +91,14 @@ impl CtrlApp {
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
         // unwrap!(spawner.spawn(io_router::task(&self.io_router)));
-        unwrap!(spawner.spawn(task_execute_commands(&self.io_router)));
+        unwrap!(spawner.spawn(task_execute_commands(self.io_router)));
 
         let executor = unsafe { &mut *self.executor.get() };
         unwrap!(spawner.spawn(task_pump_switch_events_to_microvm(executor, self.board)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
-        self.spawn_tasks(&spawner);
+        self.spawn_tasks(spawner);
 
         defmt::info!("Starting app on chip {}", uid::uid());
         loop {

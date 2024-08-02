@@ -73,7 +73,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
 
                 if value == ACTIVE_LEVEL {
                     /* Switch is pressed (or maybe noise/contact bouncing) */
-                    if state[idx] != u16::max_value() {
+                    if state[idx] != u16::MAX {
                         state[idx] += 1;
                     }
 
