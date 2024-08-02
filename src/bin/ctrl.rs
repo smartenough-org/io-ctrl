@@ -8,7 +8,7 @@
 use {defmt_rtt as _, panic_probe as _};
 
 use embassy_executor::Spawner;
-use static_cell::make_static;
+use static_cell::StaticCell;
 
 use embassy_time::{Duration, Timer};
 
@@ -18,12 +18,15 @@ use io_ctrl::boards::ctrl_board;
 /// Main testable app logic is here.
 use io_ctrl::app::CtrlApp;
 
+static BOARD: StaticCell<ctrl_board::Board> = StaticCell::new();
+static APP: StaticCell<CtrlApp> = StaticCell::new();
+
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
     defmt::info!("Preinit");
 
     // Create board peripherals (early init)
-    let board: &'static mut ctrl_board::Board = make_static!(ctrl_board::Board::init());
+    let board = BOARD.init(ctrl_board::Board::init());
 
     // Wait for stabilization of power, peripherals, etc.
     Timer::after(Duration::from_millis(50)).await;
@@ -33,6 +36,6 @@ pub async fn main(spawner: Spawner) {
     // Start board tasks.
     board.spawn_tasks(&spawner);
 
-    let app = make_static!(CtrlApp::new(board).await);
+    let app = APP.init(CtrlApp::new(board).await);
     app.main(&spawner).await;
 }

@@ -24,7 +24,7 @@ use embassy_stm32::pac;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, can, i2c, peripherals};
 // use port_expander::{Pcf8575, dev::pcf8575, write_multiple};
-use static_cell::make_static;
+use static_cell::StaticCell;
 
 bind_interrupts!(struct CanIrqs {
     FDCAN1_IT0 => can::IT0InterruptHandler<peripherals::FDCAN1>;
@@ -40,6 +40,9 @@ type AsyncI2C = I2c<'static, embassy_stm32::mode::Async>;
 type SharedI2C = I2cDevice<'static, NoopRawMutex, AsyncI2C>;
 type ExpanderSwitches = expander_switches::ExpanderSwitches<SharedI2C>;
 type ExpanderOutputs = expander_outputs::ExpanderOutputs<SharedI2C>;
+
+static I2C_BUS: StaticCell<Mutex<NoopRawMutex, AsyncI2C>> = StaticCell::new();
+static EVENT_CONVERTER: StaticCell<EventConverter> = StaticCell::new();
 
 /*
  * Hardware is shared between components and requires some internal mutability.
@@ -98,11 +101,9 @@ impl Hardware {
             Hertz(400_000),
             Default::default(),
         );
-        // let i2c_bus = make_static!(NoopMutex::new(RefCell::new(i2c)));
-        let i2c_bus = make_static!(Mutex::new(i2c));
-        // let i2c_bus = I2C_BUS.init(i2c_bus);
+        let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
-        let event_converter = make_static!(EventConverter::new());
+        let event_converter = EVENT_CONVERTER.init(EventConverter::new());
 
         /* TODO: Assumption we have up to 3 expanders. One for outputs, one for inputs */
         // Inputs
@@ -168,6 +169,3 @@ pub async fn spawn_switches(switches: &'static ExpanderSwitches) {
 pub async fn spawn_event_converter(ec: &'static EventConverter) {
     ec.run().await;
 }
-
-
-

@@ -4,7 +4,6 @@ already enabled.
 */
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::channel::Channel;
-use static_cell::make_static;
 
 use super::bindings::*;
 use super::consts::{
@@ -238,7 +237,7 @@ impl<const BN: usize> Executor<BN> {
                     }
                     stack[stack_idx] = pc;
                     stack_idx += 1;
-                    pc = self.procedures[proc_id as usize];
+                    pc = self.procedures[proc_id];
                     // pc points to Start now and will be incremented.
                 }
             }

@@ -31,10 +31,10 @@ impl EventConverter {
     pub fn try_read_events(&self) -> Option<ButtonEvent> {
         let ret = self.output_q.try_receive();
         match ret {
-            Ok(event) => return Some(event),
+            Ok(event) => Some(event),
             Err(err) => {
                 defmt::info!("Error while reading channel {:?}", err);
-                return None;
+                None
             }
         }
     }
