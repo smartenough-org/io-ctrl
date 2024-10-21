@@ -3,7 +3,7 @@ use crate::buttonsmash::{CommandQueue, Command};
 use crate::boards::ctrl_board::Board;
 use crate::io::events::IoIdx;
 
-/// App component parses inputs and turns them into various Actions
+/// App component that understands indices of IO and changes their state using Board.
 pub struct IORouter {
     board: &'static Board,
     cmd_queue: &'static CommandQueue,

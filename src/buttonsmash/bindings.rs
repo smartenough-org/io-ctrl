@@ -8,8 +8,10 @@ use defmt;
 pub enum Action {
     /// Button has single action/command
     Single(Command),
+
     /// Button executes a procedure.
     Proc(ProcIdx),
+
     /// No operation - Action is undefined.
     Noop,
 }
@@ -19,10 +21,13 @@ pub enum Action {
 pub struct Binding {
     /// Input ID
     pub idx: InIdx,
+
     /// What layer does it apply to.
     pub layer: LayerIdx,
+
     /// What is trigger type.
     pub trigger: Trigger,
+
     /// What action to execute.
     pub action: Action,
 }
@@ -60,7 +65,9 @@ impl Default for Binding {
 
 /// Keeps bindings and finds the valid ones.
 pub struct BindingList<const N: usize> {
+    /// Slots for binding definition.
     bindings: [Binding; N],
+    /// How many bindings are defined (ie. vector length)
     added: usize,
 }
 

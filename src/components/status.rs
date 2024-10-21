@@ -1,3 +1,5 @@
+UNUSED CURRENTLY.
+
 use core::cell::RefCell;
 use defmt::info;
 use embassy_stm32::gpio::{AnyPin, Output};

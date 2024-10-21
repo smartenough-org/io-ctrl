@@ -3,7 +3,7 @@ use crate::io::{
     event_converter::EventConverter,
 };
 use crate::io::pcf8575::Pcf8575;
-use core::cell::RefCell;
+use core::{cell::RefCell, sync::atomic::{AtomicU16, Ordering}};
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c::I2c;
 
@@ -17,6 +17,8 @@ pub struct ExpanderSwitches<BUS: I2c> {
 
     // Converter reads our events and produces high-level combined events.
     event_converter: &'static EventConverter,
+
+    errors: AtomicU16,
 }
 
 impl<BUS: I2c> ExpanderSwitches<BUS> {
@@ -26,7 +28,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
             io_indices,
             expander: RefCell::new(expander),
             event_converter,
-            // channel: events::InputEventChannel::new(),
+            errors: AtomicU16::new(0),
         }
     }
 
@@ -36,12 +38,10 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
          * Let's start with a generic NO switches. So we set outputs to HIGH and
          * watch for LOW state which is active.
          */
+        let mut initialized = false;
         let mut expander = self.expander.borrow_mut();
 
         defmt::info!("Starting expander scanning loop");
-
-        // Initialize pins to outputs.
-        expander.write(0xffff).await.unwrap();
 
         const LOOP_WAIT_MS: u32 = 30;
         const MIN_TIME: u16 = 2;
@@ -50,20 +50,38 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
         /* Amount of time the switch is active */
         let mut state = [0u16; 16];
 
-        let mut errors = 0;
-
         loop {
+            if !initialized {
+                // Initialize pins to outputs.
+                if let Ok(_) = expander.write(0xffff).await {
+                    initialized = true;
+                } else {
+                    let errs = self.errors.load(Ordering::Relaxed) + 1;
+                    self.errors.store(errs, Ordering::Relaxed);
+                    defmt::error!("Unable to configure expander. Errors={}", errs);
+                    if errs > 60 {
+                        defmt::panic!("Expander connection seems dead after {} errors", errs);
+                    }
+                    Timer::after(Duration::from_millis(1000)).await;
+                    continue;
+                }
+            }
+
+
             Timer::after(Duration::from_millis(LOOP_WAIT_MS.into())).await;
 
             let bytes = if let Ok(bytes) = expander.read().await {
-                errors = 0;
+                if self.errors.load(Ordering::Relaxed) > 0 {
+                    self.errors.fetch_sub(1, Ordering::Relaxed);
+                }
                 bytes
             } else {
                 // Reading failed. If intermittent, we can accept it.
-                errors += 1;
-                defmt::error!("Unable to read expander. Errors={}", errors);
-                if errors > 60 {
-                    defmt::panic!("Expander connection seems dead after {} errors", errors);
+                let errs = self.errors.load(Ordering::Relaxed) + 1;
+                self.errors.store(errs, Ordering::Relaxed);
+                defmt::error!("Unable to read expander. Errors={}", errs);
+                if errs > 60 {
+                    defmt::panic!("Expander connection seems dead after {} errors", errs);
                 }
                 continue;
             };
