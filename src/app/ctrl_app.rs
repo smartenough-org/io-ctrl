@@ -18,11 +18,13 @@ static CMD_QUEUE: StaticCell<CommandQueue> = StaticCell::new();
 static IO_ROUTER: StaticCell<io_router::IORouter> = StaticCell::new();
 
 pub struct CtrlApp {
+    /// For all IO needs (and comm peripherals like CAN and USB)
     pub board: &'static Board,
 
     pub io_router: &'static io_router::IORouter,
 
     executor: UnsafeCell<Executor<BINDINGS_COUNT>>,
+    /// Command Queue that connects Executor and IO Router.
     cmd_queue: &'static CommandQueue,
 }
 

@@ -12,7 +12,7 @@ use super::consts::{
     ProcIdx,
     Event,
     MAX_LAYERS, MAX_PROCEDURES,
-    MAX_STACK,
+    MAX_STACK, REGISTERS,
 };
 use super::layers::Layers;
 use super::opcodes::Opcode;
@@ -21,13 +21,15 @@ use crate::io::events::Trigger;
 pub type CommandQueue = Channel<NoopRawMutex, Command, 3>;
 
 /// Executes actions using a program.
-pub struct Executor<const BINDINGS: usize> {
+pub struct Executor<const BINDINGS: usize,
+                    const OPCODES: usize = 1024> {
     layers: Layers,
     bindings: BindingList<BINDINGS>,
-    opcodes: [Opcode; 1024],
+    opcodes: [Opcode; OPCODES],
     procedures: [usize; MAX_PROCEDURES],
-    // command_queue: mpsc::Sender<Command>,
-    command_queue: &'static CommandQueue
+    /// List of registers that can hold ProcId numbers.
+    registers: [u8; REGISTERS],
+    command_queue: &'static CommandQueue,
 }
 
 enum MicroState {
@@ -48,6 +50,7 @@ impl<const BN: usize> Executor<BN> {
             bindings: BindingList::new(),
             opcodes: [Opcode::Noop; 1024],
             procedures: [0; MAX_PROCEDURES],
+            registers: [0; REGISTERS],
             command_queue: queue,
         }
     }
@@ -105,6 +108,12 @@ impl<const BN: usize> Executor<BN> {
                 return MicroState::CallProc(proc_id as usize);
             }
 
+            Opcode::CallRegister(register) => {
+                return MicroState::CallProc(self.registers[register as usize] as usize);
+            }
+            Opcode::SetRegister(register, value) => {
+                self.registers[register as usize] = value;
+            }
             Opcode::Toggle(out_idx) => {
                 self.emit(Command::ToggleOutput(out_idx)).await;
             }
@@ -193,7 +202,9 @@ impl<const BN: usize> Executor<BN> {
 
                 // NOTE: Layer deactivation is handled automatically and should
                 // not be bound.
-            } // Hypothetical?
+            }
+
+            // Hypothetical?
               // Read input value (local) into register
               /*
                   Opcode::ReadInput(switch_id) => {

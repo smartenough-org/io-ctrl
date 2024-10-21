@@ -1,3 +1,5 @@
+UNUSED CURRENTLY.
+
 use super::status::{Message, Status};
 use core::cell::RefCell;
 use defmt::unwrap;

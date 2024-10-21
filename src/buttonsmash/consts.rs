@@ -12,6 +12,7 @@ pub type OutIdx = u8;
 pub type LayerIdx = u8;
 pub type ProcIdx = u8;
 pub const MAX_PROCEDURES: usize = 128;
+pub const REGISTERS: usize = 32;
 pub const MAX_LAYERS: usize = 128;
 pub const MAX_LAYER_STACK: usize = 5;
 

@@ -1,3 +1,5 @@
+// UNUSED CURRENTLY.
+
 use super::{
     intercom::Intercom,
     status::{Message, Status},
