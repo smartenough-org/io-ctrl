@@ -21,7 +21,6 @@ pub struct SwitchEvent {
     pub state: SwitchState,
 }
 
-
 /// Higher level switch abstraction.
 /// eg. Activated -> LongActivated -> LongClick -> LongDeactivated -> Deactivated.
 /// Activated -> ShortClick -> Deactivated
@@ -51,7 +50,6 @@ pub struct ButtonEvent {
 
 /// Channel to transport IO events
 pub type InputEventChannel = Channel<ThreadModeRawMutex, SwitchEvent, 8>;
-
 
 /// Any expanders that group multiple IOs together in batches of 16.
 pub(crate) trait GroupedOutputs {

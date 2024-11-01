@@ -1,6 +1,5 @@
-
-use crate::buttonsmash::{CommandQueue, Command};
 use crate::boards::ctrl_board::Board;
+use crate::buttonsmash::{Command, CommandQueue};
 use crate::io::events::IoIdx;
 
 /// App component that understands indices of IO and changes their state using Board.
@@ -11,17 +10,18 @@ pub struct IORouter {
 
 impl IORouter {
     pub fn new(board: &'static Board, cmd_queue: &'static CommandQueue) -> Self {
-        Self {
-            board,
-            cmd_queue
-        }
+        Self { board, cmd_queue }
     }
 
     pub async fn run(&self) -> ! {
         /* All initially disabled (in low-state enabled devices) */
         let mut output_state: [bool; 32] = [true; 32];
         for n in 1..=16 {
-            self.board.hardware.set_output(n as IoIdx, true).await.unwrap();
+            self.board
+                .hardware
+                .set_output(n as IoIdx, true)
+                .await
+                .unwrap();
         }
 
         loop {
@@ -34,29 +34,32 @@ impl IORouter {
             match command {
                 Command::ToggleOutput(idx) => {
                     output_state[idx as usize] = !output_state[idx as usize];
-                    self.board.hardware.set_output(idx, output_state[idx as usize]).await.unwrap();
-                },
+                    self.board
+                        .hardware
+                        .set_output(idx, output_state[idx as usize])
+                        .await
+                        .unwrap();
+                }
                 Command::ActivateOutput(idx) => {
                     // Low-state activate
                     self.board.hardware.set_output(idx, false).await.unwrap();
                     output_state[idx as usize] = false;
-                },
+                }
                 Command::DeactivateOutput(idx) => {
                     // Low-state activate
                     self.board.hardware.set_output(idx, true).await.unwrap();
                     output_state[idx as usize] = true;
-                },
+                }
                 Command::ActivateLayer(_layer) => {
                     todo!("No public activate layer");
-                },
+                }
                 Command::DeactivateLayer(_layer) => {
                     todo!("No public deactivate layer");
-                },
+                }
                 Command::Noop => {
                     // No operation
-                },
+                }
             }
-
 
             /*
             match event.trigger {

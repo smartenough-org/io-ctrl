@@ -4,18 +4,12 @@ use defmt::info;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
 
-use crate::components::{
-    // io,
-    interconnect,
-    // debouncer,
-};
+use crate::components::interconnect;
 use embassy_stm32::gpio::{Level, Output, Pin, Speed};
 
 use crate::io::{
-    expander_switches,
-    expander_outputs,
-    event_converter::EventConverter,
-    indexed_outputs::IndexedOutputs, events::IoIdx, pcf8575
+    event_converter::EventConverter, events::IoIdx, expander_outputs, expander_switches,
+    indexed_outputs::IndexedOutputs, pcf8575,
 };
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
@@ -60,10 +54,8 @@ pub struct Hardware {
     pub expander_switches: ExpanderSwitches,
 
     /// Physical outputs.
-    indexed_outputs: Mutex<
-        NoopRawMutex,
-        IndexedOutputs<18, 1, 2, ExpanderOutputs, Output<'static>>,
-    >,
+    indexed_outputs:
+        Mutex<NoopRawMutex, IndexedOutputs<18, 1, 2, ExpanderOutputs, Output<'static>>>,
 
     /// Reads low-level events from the input queue, debounces and produces high-level events.
     pub event_converter: &'static EventConverter,
@@ -76,9 +68,15 @@ impl Hardware {
     pub fn new(p: embassy_stm32::Peripherals, _shared_resource: &'static Shared) -> Self {
         /* Initialize CAN */
         // let mut can = can::Fdcan::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
+        let mut can = can::CanConfigurator::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
+
+        can.properties().set_extended_filter(
+            can::filter::ExtendedFilterSlot::_0,
+            can::filter::ExtendedFilter::accept_all_into_fifo1(),
+        );
 
         // 250k bps
-        // can.set_bitrate(250_000);
+        can.set_bitrate(250_000);
 
         let dar1 = pac::FDCAN1.cccr().read().dar();
         pac::FDCAN1.cccr().read().set_dar(false);
@@ -110,7 +108,8 @@ impl Hardware {
 
         let event_converter = EVENT_CONVERTER.init(EventConverter::new());
 
-        /* TODO: Assumption we have up to 3 expanders. One for outputs, one for inputs */
+        /* TODO: Assumption we have up to 3 expanders. One for outputs, second
+         * for inputs (light, switches), third one for sensors */
         // Inputs
         let inputs = pcf8575::Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
 

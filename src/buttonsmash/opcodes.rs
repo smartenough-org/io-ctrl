@@ -1,4 +1,4 @@
-use super::consts::{OutIdx, InIdx, ProcIdx, LayerIdx};
+use super::consts::{InIdx, LayerIdx, OutIdx, ProcIdx};
 
 /// Opcodes of the internal micro vm.
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -66,8 +66,6 @@ pub enum Opcode {
 
     /// Bind layer to activate/deactivate triggers.
     BindLayerHold(InIdx, LayerIdx),
-
-
     // Hypothetical?
     /*
     /// Read input value (local) into register

@@ -1,9 +1,12 @@
-use crate::io::{
-    events::{self, IoIdx},
-    event_converter::EventConverter,
-};
 use crate::io::pcf8575::Pcf8575;
-use core::{cell::RefCell, sync::atomic::{AtomicU16, Ordering}};
+use crate::io::{
+    event_converter::EventConverter,
+    events::{self, IoIdx},
+};
+use core::{
+    cell::RefCell,
+    sync::atomic::{AtomicU16, Ordering},
+};
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c::I2c;
 
@@ -22,8 +25,11 @@ pub struct ExpanderSwitches<BUS: I2c> {
 }
 
 impl<BUS: I2c> ExpanderSwitches<BUS> {
-    pub fn new(expander: Pcf8575<BUS>, io_indices: [IoIdx; 16],
-               event_converter: &'static EventConverter) -> Self {
+    pub fn new(
+        expander: Pcf8575<BUS>,
+        io_indices: [IoIdx; 16],
+        event_converter: &'static EventConverter,
+    ) -> Self {
         Self {
             io_indices,
             expander: RefCell::new(expander),
@@ -66,7 +72,6 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                     continue;
                 }
             }
-
 
             Timer::after(Duration::from_millis(LOOP_WAIT_MS.into())).await;
 

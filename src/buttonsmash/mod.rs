@@ -1,10 +1,10 @@
-pub mod consts;
 pub mod bindings;
+pub mod consts;
 pub mod layers;
-pub mod opcodes;
 pub mod microvm;
+pub mod opcodes;
 
-pub use opcodes::Opcode;
-pub use microvm::{Executor, CommandQueue};
-pub use consts::Event;
 pub use consts::Command;
+pub use consts::Event;
+pub use microvm::{CommandQueue, Executor};
+pub use opcodes::Opcode;

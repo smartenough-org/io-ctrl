@@ -7,12 +7,7 @@ use embassy_sync::channel::Channel;
 
 use super::bindings::*;
 use super::consts::{
-    Command,
-    InIdx,
-    ProcIdx,
-    Event,
-    MAX_LAYERS, MAX_PROCEDURES,
-    MAX_STACK, REGISTERS,
+    Command, Event, InIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS,
 };
 use super::layers::Layers;
 use super::opcodes::Opcode;
@@ -21,8 +16,7 @@ use crate::io::events::Trigger;
 pub type CommandQueue = Channel<NoopRawMutex, Command, 3>;
 
 /// Executes actions using a program.
-pub struct Executor<const BINDINGS: usize,
-                    const OPCODES: usize = 1024> {
+pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
     layers: Layers,
     bindings: BindingList<BINDINGS>,
     opcodes: [Opcode; OPCODES],
@@ -202,9 +196,7 @@ impl<const BN: usize> Executor<BN> {
 
                 // NOTE: Layer deactivation is handled automatically and should
                 // not be bound.
-            }
-
-            // Hypothetical?
+            } // Hypothetical?
               // Read input value (local) into register
               /*
                   Opcode::ReadInput(switch_id) => {
@@ -311,4 +303,3 @@ impl<const BN: usize> Executor<BN> {
         }
     }
 }
-
