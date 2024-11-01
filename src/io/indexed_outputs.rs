@@ -1,26 +1,31 @@
+use crate::io::events::{GroupedOutputs, IoIdx};
 use embedded_hal::digital::OutputPin;
-use crate::io::events::{IoIdx, GroupedOutputs};
 
 
-pub(crate) struct IndexedOutputs<const EXPANDER_N: usize, const NATIVE_N: usize, ET: GroupedOutputs, P: OutputPin>
-where
-    [(); EXPANDER_N * 16 + NATIVE_N]:,
-
+pub(crate) struct IndexedOutputs<
+    const INDICES_N: usize,
+    const EXPANDER_N: usize,
+    const NATIVE_N: usize,
+    ET: GroupedOutputs,
+    P: OutputPin,
+> where
 {
-    indices: [u8; EXPANDER_N * 16 + NATIVE_N],
+    indices: [u8; INDICES_N],
     grouped: [ET; EXPANDER_N],
     native: [P; NATIVE_N],
 }
 
-impl<const EN: usize, const NN: usize, ET: GroupedOutputs, P: OutputPin> IndexedOutputs<EN, NN, ET, P>
-where
-    [(); EN * 16 + NN]:
+impl<const IN: usize,
+     const EN: usize,
+     const NN: usize,
+     ET: GroupedOutputs, P: OutputPin>
+    IndexedOutputs<IN, EN, NN, ET, P>
 {
     /// Create new indexed output mapping with few expanders (16 IOs each) and any number of native Pins.
     /// Passed indices list maps any numeric ID to each of the PINs.
     //
     // MAYBE: Make indices tuple to index into native-0, or expander ID.
-    pub fn new(grouped: [ET; EN], native: [P; NN], indices: [u8; EN * 16 + NN]) -> Self {
+    pub fn new(grouped: [ET; EN], native: [P; NN], indices: [u8; IN]) -> Self {
         IndexedOutputs {
             grouped,
             native,

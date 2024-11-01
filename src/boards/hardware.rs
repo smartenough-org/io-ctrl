@@ -48,7 +48,7 @@ static EVENT_CONVERTER: StaticCell<EventConverter> = StaticCell::new();
  * Hardware is shared between components and requires some internal mutability.
  */
 /// Represents our µC hardware interface.
-pub(crate) struct Hardware {
+pub struct Hardware {
     // ? UnsafeCell? For led maybe ok.
     led: UnsafeCell<Output<'static>>,
 
@@ -57,13 +57,18 @@ pub(crate) struct Hardware {
     // pub outputs: RefCell<io::IOIndex<32, ExpanderPin>>,
     // pub expander_outputs: ExpanderOutputs,
     /// Handle physical switches - inputs.
-    // pub debouncer: Debouncer,
     pub expander_switches: ExpanderSwitches,
 
+    /// Physical outputs.
+    indexed_outputs: Mutex<
+        NoopRawMutex,
+        IndexedOutputs<18, 1, 2, ExpanderOutputs, Output<'static>>,
+    >,
+
+    /// Reads low-level events from the input queue, debounces and produces high-level events.
     pub event_converter: &'static EventConverter,
 
-    indexed_outputs: Mutex<NoopRawMutex, IndexedOutputs<1, 2, ExpanderOutputs, Output<'static>>>,
-    // pub interconnect: interconnect::Interconnect<peripherals::FDCAN1>,
+    /// CAN communication between the layers.
     pub interconnect: interconnect::Interconnect,
 }
 
@@ -122,12 +127,16 @@ impl Hardware {
 
         let indexed_outputs = Mutex::new(IndexedOutputs::new(
             [expander_outputs],
-            [Output::new(p.PB3, Level::High, Speed::Low),
-             Output::new(p.PB4, Level::High, Speed::Low)],
+            [
+                Output::new(p.PB3, Level::High, Speed::Low),
+                Output::new(p.PB4, Level::High, Speed::Low),
+            ],
             // IDs for outputs in order, starting with expander outputs.
-            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-             /* Native Pins start here */
-             17, 18],
+            [
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+                /* Native Pins start here */
+                17, 18,
+            ],
         ));
 
         Self {

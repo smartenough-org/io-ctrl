@@ -1,10 +1,8 @@
 #![no_std]
 #![no_main]
-// TODO: Temporarily
-#![allow(unused_imports)]
 
 // Adding/multiplying const expressions
-#![feature(generic_const_exprs)]
+// #![feature(generic_const_exprs)]
 
 /*
 TODO: Those two (USB, Intercom) are not A#

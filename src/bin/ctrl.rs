@@ -1,7 +1,5 @@
 #![no_std]
 #![no_main]
-// Static cell
-#![feature(type_alias_impl_trait)]
 // TODO: Temporarily
 #![allow(unused_imports)]
 
