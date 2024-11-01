@@ -1,24 +1,19 @@
 use crate::io::events::{GroupedOutputs, IoIdx};
 use embedded_hal::digital::OutputPin;
 
-
 pub(crate) struct IndexedOutputs<
     const INDICES_N: usize,
     const EXPANDER_N: usize,
     const NATIVE_N: usize,
     ET: GroupedOutputs,
     P: OutputPin,
-> where
-{
+> {
     indices: [u8; INDICES_N],
     grouped: [ET; EXPANDER_N],
     native: [P; NATIVE_N],
 }
 
-impl<const IN: usize,
-     const EN: usize,
-     const NN: usize,
-     ET: GroupedOutputs, P: OutputPin>
+impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: OutputPin>
     IndexedOutputs<IN, EN, NN, ET, P>
 {
     /// Create new indexed output mapping with few expanders (16 IOs each) and any number of native Pins.

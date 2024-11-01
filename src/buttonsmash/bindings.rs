@@ -1,7 +1,7 @@
-use defmt::Format;
 use super::consts::*;
 use crate::io::events::Trigger;
 use defmt;
+use defmt::Format;
 
 /// An action that a button can be mapped to.
 #[derive(Debug, Copy, Clone, Format, Eq, PartialEq)]
@@ -95,7 +95,9 @@ impl<const N: usize> BindingList<N> {
 
     /// Find first index of bindings for given input.
     fn find_first_idx(&self, input_idx: InIdx) -> Option<usize> {
-        if let Ok(mut idx) = self.bindings[0..self.added].binary_search_by_key(&input_idx, |b| b.idx) {
+        if let Ok(mut idx) =
+            self.bindings[0..self.added].binary_search_by_key(&input_idx, |b| b.idx)
+        {
             // Something was found, but no guarantee it's the first one.
             while idx > 0 {
                 if self.bindings[idx - 1].idx != input_idx {
@@ -214,10 +216,18 @@ mod tests {
         assert!(blst.filter(2, Some(1), Some(Trigger::ShortClick)).is_none());
 
         /* Overwritten ones */
-        assert_eq!(blst.filter(3, Some(2), Some(Trigger::ShortClick)).unwrap().action,
-                   Action::Single(Command::ToggleOutput(6)));
-        assert_eq!(blst.filter(1, Some(0), Some(Trigger::LongClick)).unwrap().action,
-                   Action::Single(Command::ToggleOutput(2)));
+        assert_eq!(
+            blst.filter(3, Some(2), Some(Trigger::ShortClick))
+                .unwrap()
+                .action,
+            Action::Single(Command::ToggleOutput(6))
+        );
+        assert_eq!(
+            blst.filter(1, Some(0), Some(Trigger::LongClick))
+                .unwrap()
+                .action,
+            Action::Single(Command::ToggleOutput(2))
+        );
 
         for (i, entry) in blst.bindings.iter().enumerate() {
             defmt::info!("{} {:?}", i, entry);

@@ -6,8 +6,8 @@ use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
 use static_cell::StaticCell;
 
-use crate::boards::ctrl_board::Board;
 use crate::app::io_router;
+use crate::boards::ctrl_board::Board;
 use crate::buttonsmash::consts::BINDINGS_COUNT;
 use crate::buttonsmash::{CommandQueue, Event, Executor, Opcode};
 
@@ -66,7 +66,6 @@ impl CtrlApp {
             Opcode::BindShortToggle(15, 15),
             Opcode::BindShortToggle(16, 16),
             Opcode::Stop,
-
             /*
             Opcode::BindShortToggle(1, 10),
             Opcode::BindShortToggle(2, 11),
@@ -78,7 +77,6 @@ impl CtrlApp {
             Opcode::BindShortToggle(1, 13),
             */
             Opcode::Stop,
-
             // Test proc.
             Opcode::Start(1),
             Opcode::Activate(100),
@@ -89,7 +87,6 @@ impl CtrlApp {
 
         executor.load_static(&PROGRAM).await;
     }
-
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
         // unwrap!(spawner.spawn(io_router::task(&self.io_router)));
@@ -125,15 +122,16 @@ impl CtrlApp {
     }
 }
 
-
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_execute_commands(io_router: &'static IORouter) {
     io_router.run().await;
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_pump_switch_events_to_microvm(executor: &'static mut Executor<BINDINGS_COUNT>,
-                                                board: &'static Board) {
+pub async fn task_pump_switch_events_to_microvm(
+    executor: &'static mut Executor<BINDINGS_COUNT>,
+    board: &'static Board,
+) {
     loop {
         let event = board.hardware.event_converter.read_events().await;
         defmt::info!("Got some event from expander/converter {:?}", event);
@@ -142,8 +140,6 @@ pub async fn task_pump_switch_events_to_microvm(executor: &'static mut Executor<
         executor.parse_event(&event).await;
     }
 }
-
-
 
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task(io_router: &'static mut IORouter) {

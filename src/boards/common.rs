@@ -1,7 +1,4 @@
-use embassy_stm32::{
-    time::Hertz,
-    Config,
-};
+use embassy_stm32::{time::Hertz, Config};
 
 /// Chip specific clock configuration.
 pub fn config_stm32g4() -> Config {
@@ -23,6 +20,7 @@ pub fn config_stm32g4() -> Config {
         prediv: PllPreDiv::DIV2,
         mul: PllMul::MUL72,
         divp: None,
+        // TODO: FDCan might require 42.5Mhz (from example). Unsure about USB.
         divq: pllq_div,
         // Main system clock at 144 MHz
         divr: Some(PllRDiv::DIV2),

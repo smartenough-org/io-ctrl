@@ -1,5 +1,5 @@
+use crate::io::events::{ButtonEvent, InputEventChannel, SwitchEvent, SwitchState, Trigger};
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
-use crate::io::events::{InputEventChannel, SwitchState, SwitchEvent, ButtonEvent, Trigger};
 
 pub type HighLevelChannel = Channel<ThreadModeRawMutex, ButtonEvent, 6>;
 
@@ -49,48 +49,58 @@ impl EventConverter {
             let input_event = self.input_q.receive().await;
             match input_event.state {
                 SwitchState::Activated => {
-                    self.output_q.send(ButtonEvent {
-                        switch_id: input_event.switch_id,
-                        trigger: Trigger::Activated,
-                    }).await;
+                    self.output_q
+                        .send(ButtonEvent {
+                            switch_id: input_event.switch_id,
+                            trigger: Trigger::Activated,
+                        })
+                        .await;
                 }
                 SwitchState::Active(ms) => {
                     // We were activated and are still active. For a some period of time.
                     if ms >= Self::MAX_SHORT_MS {
                         /* TODO: Should this be repeated... or deduplicated? */
-                        self.output_q.send(ButtonEvent {
-                            switch_id: input_event.switch_id,
-                            trigger: Trigger::LongActivated,
-                        }).await;
+                        self.output_q
+                            .send(ButtonEvent {
+                                switch_id: input_event.switch_id,
+                                trigger: Trigger::LongActivated,
+                            })
+                            .await;
                     }
                 }
                 SwitchState::Deactivated(ms) => {
                     // We were activated, maybe longactivated, now we deactivate.
                     if ms <= Self::MAX_SHORT_MS {
-                        self.output_q.send(ButtonEvent {
-                            switch_id: input_event.switch_id,
-                            trigger: Trigger::ShortClick,
-                        }).await;
+                        self.output_q
+                            .send(ButtonEvent {
+                                switch_id: input_event.switch_id,
+                                trigger: Trigger::ShortClick,
+                            })
+                            .await;
                     } else {
-                        self.output_q.send(ButtonEvent {
-                            switch_id: input_event.switch_id,
-                            trigger: Trigger::LongClick,
-                        }).await;
+                        self.output_q
+                            .send(ButtonEvent {
+                                switch_id: input_event.switch_id,
+                                trigger: Trigger::LongClick,
+                            })
+                            .await;
 
-                        self.output_q.send(ButtonEvent {
-                            switch_id: input_event.switch_id,
-                            trigger: Trigger::LongDeactivated,
-                        }).await;
+                        self.output_q
+                            .send(ButtonEvent {
+                                switch_id: input_event.switch_id,
+                                trigger: Trigger::LongDeactivated,
+                            })
+                            .await;
                     }
 
-                    self.output_q.send(ButtonEvent {
-                        switch_id: input_event.switch_id,
-                        trigger: Trigger::Deactivated,
-                    }).await;
-
+                    self.output_q
+                        .send(ButtonEvent {
+                            switch_id: input_event.switch_id,
+                            trigger: Trigger::Deactivated,
+                        })
+                        .await;
                 }
             }
         }
     }
 }
-

@@ -1,6 +1,6 @@
 use defmt::Format;
 
-use crate::io::events::{Trigger, ButtonEvent};
+use crate::io::events::{ButtonEvent, Trigger};
 
 /*
  * Shared, common constants and trivial structures
@@ -17,7 +17,6 @@ pub const MAX_LAYERS: usize = 128;
 pub const MAX_LAYER_STACK: usize = 5;
 
 pub const BINDINGS_COUNT: usize = 30;
-
 
 /// Max call stack size.
 pub const MAX_STACK: usize = 3;
@@ -64,7 +63,7 @@ impl Event {
     pub fn new_button_trigger(in_idx: InIdx, trigger: Trigger) -> Self {
         Event::ButtonEvent(ButtonEvent {
             switch_id: in_idx,
-            trigger
+            trigger,
         })
     }
 }

@@ -1,7 +1,4 @@
-use embassy_stm32::{
-    bind_interrupts, peripherals,
-    usart,
-};
+use embassy_stm32::{bind_interrupts, peripherals, usart};
 
 use embassy_stm32::pac;
 
@@ -15,9 +12,11 @@ use static_cell::StaticCell;
 use crate::components::interconnect;
 
 // TODO Desc
+/*
 bind_interrupts!(struct Irqs {
     USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
 });
+*/
 
 pub struct Board {
     pub hardware: hardware::Hardware,
@@ -52,7 +51,9 @@ impl Board {
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(interconnect::spawn(&self.hardware.interconnect)));
         unwrap!(spawner.spawn(hardware::spawn_switches(&self.hardware.expander_switches)));
-        unwrap!(spawner.spawn(hardware::spawn_event_converter(self.hardware.event_converter)));
+        unwrap!(spawner.spawn(hardware::spawn_event_converter(
+            self.hardware.event_converter
+        )));
     }
 
     /// According to RM0440 (page 206)
