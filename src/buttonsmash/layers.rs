@@ -82,5 +82,4 @@ impl Layers {
             self.stack[i - 1] = self.stack[i];
         }
     }
-
 }
