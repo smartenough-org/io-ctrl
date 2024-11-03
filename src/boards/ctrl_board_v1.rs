@@ -1,7 +1,7 @@
 use core::cell::UnsafeCell;
 use embassy_stm32::pac;
 
-use crate::boards::common;
+use crate::boards::{common, io_router};
 use defmt::unwrap;
 use embassy_executor::Spawner;
 
@@ -45,6 +45,9 @@ static I2C_BUS: StaticCell<Mutex<NoopRawMutex, AsyncI2C>> = StaticCell::new();
 /// It's later consumed by EventConverter.
 static RAW_EV_QUEUE: RawEventChannel = RawEventChannel::new();
 
+/// Queue of output-controlling events that are handled by IORouter.
+static IO_COMMAND_QUEUE: io_router::IOCommandQueue = io_router::IOCommandQueue::new();
+
 // TODO Desc
 /*
 bind_interrupts!(struct Irqs {
@@ -66,10 +69,12 @@ pub struct Board {
 
     /// Queue of input events (from expanders, native IOs, etc.)
     pub input_q: &'static RawEventChannel,
+    pub io_command_q: &'static io_router::IOCommandQueue,
 
     /// Physical outputs.
     indexed_outputs:
         Mutex<NoopRawMutex, IndexedOutputs<18, 1, 2, ExpanderOutputs, Output<'static>>>,
+
     /// CAN communication between the layers.
     pub interconnect: Interconnect,
 }
@@ -164,12 +169,14 @@ impl Board {
             indexed_outputs,
             interconnect,
             input_q: &RAW_EV_QUEUE,
+            io_command_q: &IO_COMMAND_QUEUE,
         }
     }
 
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(task_interconnect(&self.interconnect)));
         unwrap!(spawner.spawn(task_expander_switches(&self.expander_switches)));
+        unwrap!(spawner.spawn(io_router::task_io_router(&self, self.io_command_q)));
     }
 
     pub fn led_on(&self) {

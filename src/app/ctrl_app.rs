@@ -4,28 +4,20 @@ use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
-use static_cell::StaticCell;
 
-use crate::app::io_router;
 use crate::boards::ctrl_board::Board;
 use crate::buttonsmash::consts::BINDINGS_COUNT;
 use crate::buttonsmash::{CommandQueue, Event, Executor, Opcode};
-use crate::io::{event_converter::run_event_converter, events::HighLevelChannel};
-
-use crate::app::io_router::IORouter;
+use crate::io::{event_converter::run_event_converter, events::TriggerChannel};
 
 /// High-level command queue that are produced by executor.
-static HIGH_LEVEL_EVENT_QUEUE: HighLevelChannel = HighLevelChannel::new();
+static TRIGGER_QUEUE: TriggerChannel = TriggerChannel::new();
 /// Command Queue that connects Executor and IO Router.
 static CMD_QUEUE: CommandQueue = CommandQueue::new();
-static IO_ROUTER: StaticCell<io_router::IORouter> = StaticCell::new();
 
 pub struct CtrlApp {
     /// For all IO needs (and comm peripherals like CAN and USB)
     pub board: &'static Board,
-
-    pub io_router: &'static io_router::IORouter,
-
     executor: UnsafeCell<Executor<BINDINGS_COUNT>>,
 }
 
@@ -35,9 +27,7 @@ impl CtrlApp {
         let mut executor = Executor::new(&CMD_QUEUE);
         Self::configure(&mut executor).await;
 
-        let io_router = IO_ROUTER.init(io_router::IORouter::new(board, &CMD_QUEUE));
         Self {
-            io_router,
             board,
             executor: UnsafeCell::new(executor),
         }
@@ -89,16 +79,10 @@ impl CtrlApp {
     }
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
-        // unwrap!(spawner.spawn(io_router::task(&self.io_router)));
-        unwrap!(spawner.spawn(task_execute_commands(self.io_router)));
-
         let executor = unsafe { &mut *self.executor.get() };
         unwrap!(spawner.spawn(task_pump_switch_events_to_microvm(executor)));
 
-        unwrap!(spawner.spawn(run_event_converter(
-            self.board.input_q,
-            &HIGH_LEVEL_EVENT_QUEUE
-        )));
+        unwrap!(spawner.spawn(run_event_converter(self.board.input_q, &TRIGGER_QUEUE)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
@@ -128,14 +112,9 @@ impl CtrlApp {
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_execute_commands(io_router: &'static IORouter) {
-    io_router.run().await;
-}
-
-#[embassy_executor::task(pool_size = 1)]
 pub async fn task_pump_switch_events_to_microvm(executor: &'static mut Executor<BINDINGS_COUNT>) {
     loop {
-        let event = HIGH_LEVEL_EVENT_QUEUE.receive().await;
+        let event = TRIGGER_QUEUE.receive().await;
         defmt::info!("Got some event from expander/converter {:?}", event);
 
         let event = Event::new_button_trigger(event.switch_id, event.trigger);
