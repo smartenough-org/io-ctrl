@@ -1,4 +1,5 @@
 mod common;
+mod io_router;
 
 pub mod ctrl_board_v1;
 
