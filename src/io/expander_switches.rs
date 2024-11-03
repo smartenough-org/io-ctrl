@@ -1,8 +1,5 @@
+use crate::io::events::{self, IoIdx, RawEventChannel};
 use crate::io::pcf8575::Pcf8575;
-use crate::io::{
-    event_converter::EventConverter,
-    events::{self, IoIdx},
-};
 use core::{
     cell::RefCell,
     sync::atomic::{AtomicU16, Ordering},
@@ -19,7 +16,7 @@ pub struct ExpanderSwitches<BUS: I2c> {
     expander: RefCell<Pcf8575<BUS>>,
 
     // Converter reads our events and produces high-level combined events.
-    event_converter: &'static EventConverter,
+    queue: &'static RawEventChannel,
 
     errors: AtomicU16,
 }
@@ -28,12 +25,12 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
     pub fn new(
         expander: Pcf8575<BUS>,
         io_indices: [IoIdx; 16],
-        event_converter: &'static EventConverter,
+        queue: &'static RawEventChannel,
     ) -> Self {
         Self {
             io_indices,
             expander: RefCell::new(expander),
-            event_converter,
+            queue,
             errors: AtomicU16::new(0),
         }
     }
@@ -103,7 +100,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                     if state[idx] == MIN_TIME {
                         /* Just activated */
                         defmt::info!("ACTIVATED {}", idx);
-                        self.event_converter
+                        self.queue
                             .send(events::SwitchEvent {
                                 switch_id: self.io_indices[idx],
                                 state: events::SwitchState::Activated,
@@ -112,7 +109,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                     } else if state[idx] > MIN_TIME {
                         /* Was activated and still is active */
                         let time_active = LOOP_WAIT_MS * (state[idx] as u32);
-                        self.event_converter
+                        self.queue
                             .send(events::SwitchEvent {
                                 switch_id: self.io_indices[idx],
                                 state: events::SwitchState::Active(time_active),
@@ -127,7 +124,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                         /* Was active, now it just got deactivated */
                         let time_active = LOOP_WAIT_MS * (state[idx] as u32);
                         defmt::info!("DEACTIVATED {} after {}ms", idx, time_active);
-                        self.event_converter
+                        self.queue
                             .send(events::SwitchEvent {
                                 switch_id: self.io_indices[idx],
                                 state: events::SwitchState::Deactivated(time_active),

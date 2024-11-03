@@ -1,13 +1,9 @@
-use embassy_stm32::{bind_interrupts, peripherals, usart};
-
 use embassy_stm32::pac;
 
 use crate::boards::common;
 use crate::boards::hardware;
-use crate::boards::shared::Shared;
 use defmt::unwrap;
 use embassy_executor::Spawner;
-use static_cell::StaticCell;
 
 use crate::components::interconnect;
 
@@ -20,11 +16,7 @@ bind_interrupts!(struct Irqs {
 
 pub struct Board {
     pub hardware: hardware::Hardware,
-    pub shared: &'static Shared,
-    // pub shared_resource: &'static SharedResource,
 }
-
-static SHARED: StaticCell<Shared> = StaticCell::new();
 
 impl Board {
     pub fn init() -> Self {
@@ -42,18 +34,14 @@ impl Board {
             defmt::info!("Option bytes already configured, BOOT0 is disabled");
         }
 
-        let shared = SHARED.init(Shared::new());
-        let hardware = hardware::Hardware::new(peripherals, shared);
+        let hardware = hardware::Hardware::new(peripherals);
 
-        Board { hardware, shared }
+        Board { hardware }
     }
 
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(interconnect::spawn(&self.hardware.interconnect)));
         unwrap!(spawner.spawn(hardware::spawn_switches(&self.hardware.expander_switches)));
-        unwrap!(spawner.spawn(hardware::spawn_event_converter(
-            self.hardware.event_converter
-        )));
     }
 
     /// According to RM0440 (page 206)
