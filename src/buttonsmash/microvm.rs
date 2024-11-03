@@ -2,8 +2,7 @@
 TODO: We lack the ability to toggle a group on/off if say one lamp from the group is
 already enabled.
 */
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::channel::Channel;
+use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
 
 use super::bindings::*;
 use super::consts::{
@@ -13,7 +12,7 @@ use super::layers::Layers;
 use super::opcodes::Opcode;
 use crate::io::events::Trigger;
 
-pub type CommandQueue = Channel<NoopRawMutex, Command, 3>;
+pub type CommandQueue = Channel<ThreadModeRawMutex, Command, 3>;
 
 /// Executes actions using a program.
 pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {

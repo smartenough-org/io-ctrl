@@ -1,4 +1,3 @@
-use crate::boards::shared::Shared;
 use core::cell::UnsafeCell;
 use defmt::info;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
@@ -8,7 +7,7 @@ use crate::components::interconnect;
 use embassy_stm32::gpio::{Level, Output, Pin, Speed};
 
 use crate::io::{
-    event_converter::EventConverter, events::IoIdx, expander_outputs, expander_switches,
+    events::IoIdx, events::RawEventChannel, expander_outputs, expander_switches,
     indexed_outputs::IndexedOutputs, pcf8575,
 };
 
@@ -36,7 +35,10 @@ type ExpanderSwitches = expander_switches::ExpanderSwitches<SharedI2C>;
 type ExpanderOutputs = expander_outputs::ExpanderOutputs<SharedI2C>;
 
 static I2C_BUS: StaticCell<Mutex<NoopRawMutex, AsyncI2C>> = StaticCell::new();
-static EVENT_CONVERTER: StaticCell<EventConverter> = StaticCell::new();
+
+/// A queue that aggregates all hardware event sources (expanders, native IOs, etc).
+/// It's later consumed by EventConverter.
+static RAW_EV_QUEUE: RawEventChannel = RawEventChannel::new();
 
 /*
  * Hardware is shared between components and requires some internal mutability.
@@ -53,19 +55,18 @@ pub struct Hardware {
     /// Handle physical switches - inputs.
     pub expander_switches: ExpanderSwitches,
 
+    /// Queue of input events (from expanders, native IOs, etc.)
+    pub input_q: &'static RawEventChannel,
+
     /// Physical outputs.
     indexed_outputs:
         Mutex<NoopRawMutex, IndexedOutputs<18, 1, 2, ExpanderOutputs, Output<'static>>>,
-
-    /// Reads low-level events from the input queue, debounces and produces high-level events.
-    pub event_converter: &'static EventConverter,
-
     /// CAN communication between the layers.
     pub interconnect: interconnect::Interconnect,
 }
 
 impl Hardware {
-    pub fn new(p: embassy_stm32::Peripherals, _shared_resource: &'static Shared) -> Self {
+    pub fn new(p: embassy_stm32::Peripherals) -> Self {
         /* Initialize CAN */
         // let mut can = can::Fdcan::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
         let mut can = can::CanConfigurator::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
@@ -106,8 +107,6 @@ impl Hardware {
         );
         let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
-        let event_converter = EVENT_CONVERTER.init(EventConverter::new());
-
         /* TODO: Assumption we have up to 3 expanders. One for outputs, second
          * for inputs (light, switches), third one for sensors */
         // Inputs
@@ -119,7 +118,7 @@ impl Hardware {
         let expander_switches = ExpanderSwitches::new(
             inputs,
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-            event_converter,
+            &RAW_EV_QUEUE,
         );
 
         let expander_outputs = ExpanderOutputs::new(outputs);
@@ -144,9 +143,7 @@ impl Hardware {
             expander_switches,
             indexed_outputs,
             interconnect,
-
-            // TODO: This is not a hardware.
-            event_converter,
+            input_q: &RAW_EV_QUEUE,
         }
     }
 
@@ -171,9 +168,4 @@ impl Hardware {
 #[embassy_executor::task(pool_size = 1)]
 pub async fn spawn_switches(switches: &'static ExpanderSwitches) {
     switches.run().await;
-}
-
-#[embassy_executor::task(pool_size = 1)]
-pub async fn spawn_event_converter(ec: &'static EventConverter) {
-    ec.run().await;
 }

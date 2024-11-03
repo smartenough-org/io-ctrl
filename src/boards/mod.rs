@@ -1,6 +1,5 @@
 mod common;
 mod hardware;
-mod shared;
 
 pub mod ctrl_board_v1;
 
