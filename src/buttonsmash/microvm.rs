@@ -263,6 +263,7 @@ impl<const BN: usize> Executor<BN> {
     /// Reads events and reacts to it.
     pub async fn parse_event(&mut self, event: &Event) {
         match event {
+            // Local button press.
             Event::ButtonEvent(data) => {
                 if data.trigger == Trigger::Deactivated
                     && self.layers.maybe_deactivate(data.switch_id)
@@ -299,6 +300,20 @@ impl<const BN: usize> Executor<BN> {
                 } else {
                     defmt::info!("Not found binding {:?}!", data);
                 }
+            }
+            // Remote call over Interconnect.
+            Event::RemoteProcedureCall(proc_idx) => {
+                self.execute(*proc_idx).await;
+            }
+            Event::RemoteToggle(out_idx) => {
+                self.emit(Command::ToggleOutput(*out_idx)).await;
+            }
+
+            Event::RemoteActivate(out_idx) => {
+                self.emit(Command::ActivateOutput(*out_idx)).await;
+            }
+            Event::RemoteDeactivate(out_idx) => {
+                self.emit(Command::DeactivateOutput(*out_idx)).await;
             }
         }
     }

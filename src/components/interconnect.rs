@@ -17,6 +17,10 @@ impl Interconnect {
     }
     */
 
+    /// Schedule transmission of a interconnect message.
+    async fn transmit(&self) {}
+
+    /// Run task that receives messages and pushes relevant into queue.
     async fn run(&self) {}
 }
 
