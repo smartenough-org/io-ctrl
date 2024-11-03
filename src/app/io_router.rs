@@ -17,11 +17,7 @@ impl IORouter {
         /* All initially disabled (in low-state enabled devices) */
         let mut output_state: [bool; 32] = [true; 32];
         for n in 1..=16 {
-            self.board
-                .hardware
-                .set_output(n as IoIdx, true)
-                .await
-                .unwrap();
+            self.board.set_output(n as IoIdx, true).await.unwrap();
         }
 
         loop {
@@ -35,19 +31,18 @@ impl IORouter {
                 Command::ToggleOutput(idx) => {
                     output_state[idx as usize] = !output_state[idx as usize];
                     self.board
-                        .hardware
                         .set_output(idx, output_state[idx as usize])
                         .await
                         .unwrap();
                 }
                 Command::ActivateOutput(idx) => {
                     // Low-state activate
-                    self.board.hardware.set_output(idx, false).await.unwrap();
+                    self.board.set_output(idx, false).await.unwrap();
                     output_state[idx as usize] = false;
                 }
                 Command::DeactivateOutput(idx) => {
                     // Low-state activate
-                    self.board.hardware.set_output(idx, true).await.unwrap();
+                    self.board.set_output(idx, true).await.unwrap();
                     output_state[idx as usize] = true;
                 }
                 Command::ActivateLayer(_layer) => {
@@ -70,7 +65,7 @@ impl IORouter {
                     // Toggle correlated output
                     let switch_id = event.switch_id as usize;
                     output_state[switch_id] = !output_state[switch_id];
-                    self.board.hardware.set_output(event.switch_id, output_state[switch_id]).await.unwrap();
+                    self.board.set_output(event.switch_id, output_state[switch_id]).await.unwrap();
                     defmt::info!("Set output {} to {}", switch_id, output_state[switch_id]);
                 }
                 _ => {}

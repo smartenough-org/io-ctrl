@@ -96,7 +96,7 @@ impl CtrlApp {
         unwrap!(spawner.spawn(task_pump_switch_events_to_microvm(executor)));
 
         unwrap!(spawner.spawn(run_event_converter(
-            self.board.hardware.input_q,
+            self.board.input_q,
             &HIGH_LEVEL_EVENT_QUEUE
         )));
     }
@@ -108,9 +108,9 @@ impl CtrlApp {
         loop {
             // defmt::info!("Main app tick");
             Timer::after(Duration::from_millis(1000)).await;
-            self.board.hardware.led_on();
+            self.board.led_on();
             Timer::after(Duration::from_millis(1000)).await;
-            self.board.hardware.led_off();
+            self.board.led_off();
 
             /*
             let ir_reg = pac::FDCAN1.ir().read();
@@ -133,9 +133,7 @@ pub async fn task_execute_commands(io_router: &'static IORouter) {
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_pump_switch_events_to_microvm(
-    executor: &'static mut Executor<BINDINGS_COUNT>
-) {
+pub async fn task_pump_switch_events_to_microvm(executor: &'static mut Executor<BINDINGS_COUNT>) {
     loop {
         let event = HIGH_LEVEL_EVENT_QUEUE.receive().await;
         defmt::info!("Got some event from expander/converter {:?}", event);

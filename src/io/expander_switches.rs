@@ -15,7 +15,7 @@ pub struct ExpanderSwitches<BUS: I2c> {
     /// shared i2c bus
     expander: RefCell<Pcf8575<BUS>>,
 
-    // Converter reads our events and produces high-level combined events.
+    // We output events into this queue.
     queue: &'static RawEventChannel,
 
     errors: AtomicU16,
