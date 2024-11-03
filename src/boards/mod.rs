@@ -1,5 +1,4 @@
 mod common;
-mod hardware;
 
 pub mod ctrl_board_v1;
 

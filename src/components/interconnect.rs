@@ -21,11 +21,5 @@ impl Interconnect {
     async fn transmit(&self) {}
 
     /// Run task that receives messages and pushes relevant into queue.
-    async fn run(&self) {}
-}
-
-/* Fixme, this should not depend on FDCAN1 */
-#[embassy_executor::task]
-pub async fn spawn(can: &'static Interconnect) {
-    can.run().await
+    pub async fn run(&self) {}
 }
