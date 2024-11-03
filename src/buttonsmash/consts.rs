@@ -49,6 +49,7 @@ pub enum LayerEvent {
     Deactivate(u8),
 }
 
+/// Events handled as inputs to the Executor/MicroVM.
 #[derive(Format)]
 pub enum Event {
     /// Button event
@@ -57,6 +58,10 @@ pub enum Event {
     /// External information about layer change
     LayerEvent(LayerEvent),
     */
+    RemoteProcedureCall(ProcIdx),
+    RemoteToggle(OutIdx),
+    RemoteActivate(OutIdx),
+    RemoteDeactivate(OutIdx),
 }
 
 impl Event {
