@@ -6,14 +6,16 @@ use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
+use crate::boards::IOCommandChannel;
+
 use crate::buttonsmash::consts::BINDINGS_COUNT;
-use crate::buttonsmash::{CommandChannel, EventChannel, Executor, Opcode};
+use crate::buttonsmash::{EventChannel, Executor, Opcode};
 use crate::io::event_converter::run_event_converter;
 
 /// High-level command queue that are produced by executor.
 static EVENT_CHANNEL: EventChannel = EventChannel::new();
 /// Command Queue that connects Executor and IO Router.
-static CMD_CHANNEL: CommandChannel = CommandChannel::new();
+static CMD_CHANNEL: IOCommandChannel = IOCommandChannel::new();
 
 pub struct CtrlApp {
     /// For all IO needs (and comm peripherals like CAN and USB)

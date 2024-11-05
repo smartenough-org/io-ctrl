@@ -46,7 +46,7 @@ static I2C_BUS: StaticCell<Mutex<NoopRawMutex, AsyncI2C>> = StaticCell::new();
 static RAW_EV_QUEUE: RawEventChannel = RawEventChannel::new();
 
 /// Queue of output-controlling events that are handled by IORouter.
-static IO_COMMAND_QUEUE: io_router::IOCommandQueue = io_router::IOCommandQueue::new();
+static IO_COMMAND_QUEUE: io_router::IOCommandChannel = io_router::IOCommandChannel::new();
 
 // TODO Desc
 /*
@@ -69,7 +69,7 @@ pub struct Board {
 
     /// Queue of input events (from expanders, native IOs, etc.)
     pub input_q: &'static RawEventChannel,
-    pub io_command_q: &'static io_router::IOCommandQueue,
+    pub io_command_q: &'static io_router::IOCommandChannel,
 
     /// Physical outputs.
     indexed_outputs:

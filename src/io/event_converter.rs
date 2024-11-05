@@ -1,5 +1,5 @@
 use crate::buttonsmash::{Event, EventChannel};
-use crate::io::events::{RawEventChannel, SwitchState, Trigger, TriggerChannel};
+use crate::io::events::{RawEventChannel, SwitchState, Trigger};
 
 /// Max time [ms] until which the activation ends in ShortClick.
 const MAX_SHORT_MS: u32 = 300;
