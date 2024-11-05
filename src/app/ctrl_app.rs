@@ -7,13 +7,13 @@ use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
 use crate::buttonsmash::consts::BINDINGS_COUNT;
-use crate::buttonsmash::{CommandQueue, Event, Executor, Opcode};
-use crate::io::{event_converter::run_event_converter, events::TriggerChannel};
+use crate::buttonsmash::{CommandChannel, EventChannel, Executor, Opcode};
+use crate::io::event_converter::run_event_converter;
 
 /// High-level command queue that are produced by executor.
-static TRIGGER_QUEUE: TriggerChannel = TriggerChannel::new();
+static EVENT_CHANNEL: EventChannel = EventChannel::new();
 /// Command Queue that connects Executor and IO Router.
-static CMD_QUEUE: CommandQueue = CommandQueue::new();
+static CMD_CHANNEL: CommandChannel = CommandChannel::new();
 
 pub struct CtrlApp {
     /// For all IO needs (and comm peripherals like CAN and USB)
@@ -24,7 +24,7 @@ pub struct CtrlApp {
 impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
         // let cmd_queue = CMD_QUEUE.init(CommandQueue::new());
-        let mut executor = Executor::new(&CMD_QUEUE);
+        let mut executor = Executor::new(&CMD_CHANNEL);
         Self::configure(&mut executor).await;
 
         Self {
@@ -81,8 +81,7 @@ impl CtrlApp {
     fn spawn_tasks(&'static self, spawner: &Spawner) {
         let executor = unsafe { &mut *self.executor.get() };
         unwrap!(spawner.spawn(task_pump_switch_events_to_microvm(executor)));
-
-        unwrap!(spawner.spawn(run_event_converter(self.board.input_q, &TRIGGER_QUEUE)));
+        unwrap!(spawner.spawn(run_event_converter(self.board.input_q, &EVENT_CHANNEL)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
@@ -111,13 +110,8 @@ impl CtrlApp {
     }
 }
 
+
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_pump_switch_events_to_microvm(executor: &'static mut Executor<BINDINGS_COUNT>) {
-    loop {
-        let event = TRIGGER_QUEUE.receive().await;
-        defmt::info!("Got some event from expander/converter {:?}", event);
-
-        let event = Event::new_button_trigger(event.switch_id, event.trigger);
-        executor.parse_event(&event).await;
-    }
+    executor.listen_events(&EVENT_CHANNEL).await;
 }

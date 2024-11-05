@@ -49,10 +49,7 @@ pub struct ButtonEvent {
 }
 
 /// Channel to transport Raw, low-level IO events
-pub type RawEventChannel = Channel<ThreadModeRawMutex, SwitchEvent, 8>;
-
-/// Channel to tranport high-level debounced IO events.
-pub type TriggerChannel = Channel<ThreadModeRawMutex, ButtonEvent, 6>;
+pub type RawEventChannel = Channel<ThreadModeRawMutex, SwitchEvent, 5>;
 
 /// Any expanders that group multiple IOs together in batches of 16.
 pub(crate) trait GroupedOutputs {

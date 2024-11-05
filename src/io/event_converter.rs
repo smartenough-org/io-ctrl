@@ -1,4 +1,5 @@
-use crate::io::events::{ButtonEvent, TriggerChannel, RawEventChannel, SwitchState, Trigger};
+use crate::buttonsmash::{Event, EventChannel};
+use crate::io::events::{RawEventChannel, SwitchState, Trigger, TriggerChannel};
 
 /// Max time [ms] until which the activation ends in ShortClick.
 const MAX_SHORT_MS: u32 = 300;
@@ -19,17 +20,14 @@ const MAX_SHORT_MS: u32 = 300;
 #[embassy_executor::task(pool_size = 1)]
 pub async fn run_event_converter(
     input_q: &'static RawEventChannel,
-    output_q: &'static TriggerChannel,
+    output_q: &'static EventChannel,
 ) {
     loop {
         let input_event = input_q.receive().await;
         match input_event.state {
             SwitchState::Activated => {
                 output_q
-                    .send(ButtonEvent {
-                        switch_id: input_event.switch_id,
-                        trigger: Trigger::Activated,
-                    })
+                    .send(Event::new_button(input_event.switch_id, Trigger::Activated))
                     .await;
             }
             SwitchState::Active(ms) => {
@@ -37,10 +35,10 @@ pub async fn run_event_converter(
                 if ms >= MAX_SHORT_MS {
                     /* TODO: Should this be repeated... or deduplicated? */
                     output_q
-                        .send(ButtonEvent {
-                            switch_id: input_event.switch_id,
-                            trigger: Trigger::LongActivated,
-                        })
+                        .send(Event::new_button(
+                            input_event.switch_id,
+                            Trigger::LongActivated,
+                        ))
                         .await;
                 }
             }
@@ -48,32 +46,29 @@ pub async fn run_event_converter(
                 // We were activated, maybe longactivated, now we deactivate.
                 if ms <= MAX_SHORT_MS {
                     output_q
-                        .send(ButtonEvent {
-                            switch_id: input_event.switch_id,
-                            trigger: Trigger::ShortClick,
-                        })
+                        .send(Event::new_button(
+                            input_event.switch_id,
+                            Trigger::ShortClick,
+                        ))
                         .await;
                 } else {
                     output_q
-                        .send(ButtonEvent {
-                            switch_id: input_event.switch_id,
-                            trigger: Trigger::LongClick,
-                        })
+                        .send(Event::new_button(input_event.switch_id, Trigger::LongClick))
                         .await;
 
                     output_q
-                        .send(ButtonEvent {
-                            switch_id: input_event.switch_id,
-                            trigger: Trigger::LongDeactivated,
-                        })
+                        .send(Event::new_button(
+                            input_event.switch_id,
+                            Trigger::LongDeactivated,
+                        ))
                         .await;
                 }
 
                 output_q
-                    .send(ButtonEvent {
-                        switch_id: input_event.switch_id,
-                        trigger: Trigger::Deactivated,
-                    })
+                    .send(Event::new_button(
+                        input_event.switch_id,
+                        Trigger::Deactivated,
+                    ))
                     .await;
             }
         }

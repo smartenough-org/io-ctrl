@@ -6,13 +6,13 @@ use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
 
 use super::bindings::*;
 use super::consts::{
-    Command, Event, InIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS,
+    Command, Event, EventChannel, InIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS,
 };
 use super::layers::Layers;
 use super::opcodes::Opcode;
 use crate::io::events::Trigger;
 
-pub type CommandQueue = Channel<ThreadModeRawMutex, Command, 3>;
+pub type CommandChannel = Channel<ThreadModeRawMutex, Command, 3>;
 
 /// Executes actions using a program.
 pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
@@ -22,7 +22,7 @@ pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
     procedures: [usize; MAX_PROCEDURES],
     /// List of registers that can hold ProcId numbers.
     registers: [u8; REGISTERS],
-    command_queue: &'static CommandQueue,
+    command_queue: &'static CommandChannel,
 }
 
 enum MicroState {
@@ -37,7 +37,7 @@ enum MicroState {
 }
 
 impl<const BN: usize> Executor<BN> {
-    pub fn new(queue: &'static CommandQueue) -> Self {
+    pub fn new(queue: &'static CommandChannel) -> Self {
         Self {
             layers: Layers::new(),
             bindings: BindingList::new(),
@@ -260,7 +260,7 @@ impl<const BN: usize> Executor<BN> {
     }
 
     /// Reads events and reacts to it.
-    pub async fn parse_event(&mut self, event: &Event) {
+    pub async fn parse_event(&mut self, event: Event) {
         match event {
             // Local button press.
             Event::ButtonEvent(data) => {
@@ -302,18 +302,25 @@ impl<const BN: usize> Executor<BN> {
             }
             // Remote call over Interconnect.
             Event::RemoteProcedureCall(proc_idx) => {
-                self.execute(*proc_idx).await;
+                self.execute(proc_idx).await;
             }
             Event::RemoteToggle(out_idx) => {
-                self.emit(Command::ToggleOutput(*out_idx)).await;
+                self.emit(Command::ToggleOutput(out_idx)).await;
             }
 
             Event::RemoteActivate(out_idx) => {
-                self.emit(Command::ActivateOutput(*out_idx)).await;
+                self.emit(Command::ActivateOutput(out_idx)).await;
             }
             Event::RemoteDeactivate(out_idx) => {
-                self.emit(Command::DeactivateOutput(*out_idx)).await;
+                self.emit(Command::DeactivateOutput(out_idx)).await;
             }
+        }
+    }
+
+    pub async fn listen_events(&mut self, event_channel: &'static EventChannel) {
+        loop {
+            let input_event = event_channel.receive().await;
+            self.parse_event(input_event).await;
         }
     }
 }
