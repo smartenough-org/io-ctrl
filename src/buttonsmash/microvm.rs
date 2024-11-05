@@ -9,7 +9,7 @@ use super::consts::{
 use super::layers::Layers;
 use super::opcodes::Opcode;
 use crate::io::events::Trigger;
-use crate::boards::{IOCommand, IOCommandChannel};
+use crate::boards::{IOCommand, OutputChannel};
 
 /// Executes actions using a program.
 pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
@@ -19,7 +19,7 @@ pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
     procedures: [usize; MAX_PROCEDURES],
     /// List of registers that can hold ProcId numbers.
     registers: [u8; REGISTERS],
-    command_channel: &'static IOCommandChannel,
+    output_channel: &'static OutputChannel,
 }
 
 enum MicroState {
@@ -34,14 +34,14 @@ enum MicroState {
 }
 
 impl<const BN: usize> Executor<BN> {
-    pub fn new(queue: &'static IOCommandChannel) -> Self {
+    pub fn new(queue: &'static OutputChannel) -> Self {
         Self {
             layers: Layers::new(),
             bindings: BindingList::new(),
             opcodes: [Opcode::Noop; 1024],
             procedures: [0; MAX_PROCEDURES],
             registers: [0; REGISTERS],
-            command_channel: queue,
+            output_channel: queue,
         }
     }
 
@@ -58,7 +58,7 @@ impl<const BN: usize> Executor<BN> {
     async fn emit(&self, command: IOCommand) {
         defmt::info!("Emiting from executor {:?}", command);
         // TODO: Maybe some timeout in case it breaks and we don't want to hang?
-        self.command_channel.send(command).await;
+        self.output_channel.send(command).await;
     }
 
     /// Helper: Bind input/trigger to a call to a given procedure.

@@ -14,7 +14,7 @@ use embassy_sync::mutex::Mutex;
 use embassy_stm32::gpio::{Level, Output, Pin, Speed};
 
 use crate::io::{
-    events::IoIdx, events::RawEventChannel, expander_outputs, expander_switches,
+    events::IoIdx, events::InputChannel, expander_outputs, expander_switches,
     indexed_outputs::IndexedOutputs, pcf8575::Pcf8575,
 };
 
@@ -43,17 +43,10 @@ static I2C_BUS: StaticCell<Mutex<NoopRawMutex, AsyncI2C>> = StaticCell::new();
 
 /// A queue that aggregates all hardware event sources (expanders, native IOs, etc).
 /// It's later consumed by EventConverter.
-static RAW_EV_QUEUE: RawEventChannel = RawEventChannel::new();
+static INPUT_CHANNEL: InputChannel = InputChannel::new();
 
 /// Queue of output-controlling events that are handled by IORouter.
-static IO_COMMAND_QUEUE: io_router::IOCommandChannel = io_router::IOCommandChannel::new();
-
-// TODO Desc
-/*
-bind_interrupts!(struct Irqs {
-    USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
-});
-*/
+static OUTPUT_CHANNEL: io_router::OutputChannel = io_router::OutputChannel::new();
 
 /// Represents our µC hardware interface. It's 'static and shared by most code.
 pub struct Board {
@@ -68,8 +61,8 @@ pub struct Board {
     pub expander_switches: ExpanderSwitches,
 
     /// Queue of input events (from expanders, native IOs, etc.)
-    pub input_q: &'static RawEventChannel,
-    pub io_command_q: &'static io_router::IOCommandChannel,
+    pub input_q: &'static InputChannel,
+    pub io_command_q: &'static io_router::OutputChannel,
 
     /// Physical outputs.
     indexed_outputs:
@@ -144,7 +137,7 @@ impl Board {
         let expander_switches = ExpanderSwitches::new(
             inputs,
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-            &RAW_EV_QUEUE,
+            &INPUT_CHANNEL,
         );
 
         let expander_outputs = ExpanderOutputs::new(outputs);
@@ -168,8 +161,8 @@ impl Board {
             expander_switches,
             indexed_outputs,
             interconnect,
-            input_q: &RAW_EV_QUEUE,
-            io_command_q: &IO_COMMAND_QUEUE,
+            input_q: &INPUT_CHANNEL,
+            io_command_q: &OUTPUT_CHANNEL,
         }
     }
 
