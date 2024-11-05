@@ -1,6 +1,7 @@
 use defmt::Format;
 
 use crate::io::events::{ButtonEvent, Trigger};
+use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
 
 /*
  * Shared, common constants and trivial structures
@@ -65,10 +66,13 @@ pub enum Event {
 }
 
 impl Event {
-    pub fn new_button_trigger(in_idx: InIdx, trigger: Trigger) -> Self {
+    pub fn new_button(in_idx: InIdx, trigger: Trigger) -> Self {
         Event::ButtonEvent(ButtonEvent {
             switch_id: in_idx,
             trigger,
         })
     }
 }
+
+/// Channel to tranport high-level events into the Executor.
+pub type EventChannel = Channel<ThreadModeRawMutex, Event, 5>;
