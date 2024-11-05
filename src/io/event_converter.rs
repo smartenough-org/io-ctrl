@@ -1,5 +1,5 @@
 use crate::buttonsmash::{Event, EventChannel};
-use crate::io::events::{RawEventChannel, SwitchState, Trigger};
+use crate::io::events::{InputChannel, SwitchState, Trigger};
 
 /// Max time [ms] until which the activation ends in ShortClick.
 const MAX_SHORT_MS: u32 = 300;
@@ -19,7 +19,7 @@ const MAX_SHORT_MS: u32 = 300;
 
 #[embassy_executor::task(pool_size = 1)]
 pub async fn run_event_converter(
-    input_q: &'static RawEventChannel,
+    input_q: &'static InputChannel,
     output_q: &'static EventChannel,
 ) {
     loop {

@@ -6,7 +6,7 @@ use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
-use crate::boards::IOCommandChannel;
+use crate::boards::OutputChannel;
 
 use crate::buttonsmash::consts::BINDINGS_COUNT;
 use crate::buttonsmash::{EventChannel, Executor, Opcode};
@@ -15,7 +15,7 @@ use crate::io::event_converter::run_event_converter;
 /// High-level command queue that are produced by executor.
 static EVENT_CHANNEL: EventChannel = EventChannel::new();
 /// Command Queue that connects Executor and IO Router.
-static CMD_CHANNEL: IOCommandChannel = IOCommandChannel::new();
+static OUTPUT_CHANNEL: OutputChannel = OutputChannel::new();
 
 pub struct CtrlApp {
     /// For all IO needs (and comm peripherals like CAN and USB)
@@ -26,7 +26,7 @@ pub struct CtrlApp {
 impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
         // let cmd_queue = CMD_QUEUE.init(CommandQueue::new());
-        let mut executor = Executor::new(&CMD_CHANNEL);
+        let mut executor = Executor::new(&OUTPUT_CHANNEL);
         Self::configure(&mut executor).await;
 
         Self {

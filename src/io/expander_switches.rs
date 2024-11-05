@@ -1,4 +1,4 @@
-use crate::io::events::{self, IoIdx, RawEventChannel};
+use crate::io::events::{self, IoIdx, InputChannel};
 use crate::io::pcf8575::Pcf8575;
 use core::{
     cell::RefCell,
@@ -16,7 +16,7 @@ pub struct ExpanderSwitches<BUS: I2c> {
     expander: RefCell<Pcf8575<BUS>>,
 
     // We output events into this queue.
-    queue: &'static RawEventChannel,
+    queue: &'static InputChannel,
 
     errors: AtomicU16,
 }
@@ -25,7 +25,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
     pub fn new(
         expander: Pcf8575<BUS>,
         io_indices: [IoIdx; 16],
-        queue: &'static RawEventChannel,
+        queue: &'static InputChannel,
     ) -> Self {
         Self {
             io_indices,
