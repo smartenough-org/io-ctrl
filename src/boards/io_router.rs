@@ -15,11 +15,11 @@ pub enum IOCommand {
     DeactivateOutput(OutIdx),
 }
 
-pub type IOCommandQueue = Channel<ThreadModeRawMutex, IOCommand, 3>;
+pub type IOCommandChannel = Channel<ThreadModeRawMutex, IOCommand, 3>;
 
 /// Read events from command queue and alter our outputs.
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_io_router(board: &'static Board, cmd_queue: &'static IOCommandQueue) {
+pub async fn task_io_router(board: &'static Board, cmd_queue: &'static IOCommandChannel) {
     /* All initially disabled (in low-state enabled devices) */
     let mut output_state: [bool; 32] = [true; 32];
     for n in 1..=16 {

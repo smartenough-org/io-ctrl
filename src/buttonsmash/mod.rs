@@ -6,5 +6,5 @@ pub mod opcodes;
 
 pub use consts::Command;
 pub use consts::{Event, EventChannel};
-pub use microvm::{CommandChannel, Executor};
+pub use microvm::Executor;
 pub use opcodes::Opcode;

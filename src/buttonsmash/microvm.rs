@@ -2,8 +2,6 @@
 TODO: We lack the ability to toggle a group on/off if say one lamp from the group is
 already enabled.
 */
-use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
-
 use super::bindings::*;
 use super::consts::{
     Command, Event, EventChannel, InIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS,
@@ -11,8 +9,7 @@ use super::consts::{
 use super::layers::Layers;
 use super::opcodes::Opcode;
 use crate::io::events::Trigger;
-
-pub type CommandChannel = Channel<ThreadModeRawMutex, Command, 3>;
+use crate::boards::{IOCommand, IOCommandChannel};
 
 /// Executes actions using a program.
 pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
@@ -22,7 +19,7 @@ pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
     procedures: [usize; MAX_PROCEDURES],
     /// List of registers that can hold ProcId numbers.
     registers: [u8; REGISTERS],
-    command_queue: &'static CommandChannel,
+    command_channel: &'static IOCommandChannel,
 }
 
 enum MicroState {
@@ -37,14 +34,14 @@ enum MicroState {
 }
 
 impl<const BN: usize> Executor<BN> {
-    pub fn new(queue: &'static CommandChannel) -> Self {
+    pub fn new(queue: &'static IOCommandChannel) -> Self {
         Self {
             layers: Layers::new(),
             bindings: BindingList::new(),
             opcodes: [Opcode::Noop; 1024],
             procedures: [0; MAX_PROCEDURES],
             registers: [0; REGISTERS],
-            command_queue: queue,
+            command_channel: queue,
         }
     }
 
@@ -58,14 +55,10 @@ impl<const BN: usize> Executor<BN> {
         self.layers.reset();
     }
 
-    async fn emit(&self, command: Command) {
-        defmt::info!("Emiting {:?}", command);
+    async fn emit(&self, command: IOCommand) {
+        defmt::info!("Emiting from executor {:?}", command);
         // TODO: Maybe some timeout in case it breaks and we don't want to hang?
-        self.command_queue.send(command).await;
-    }
-
-    pub async fn read_events(&self) -> Command {
-        self.command_queue.receive().await
+        self.command_channel.send(command).await;
     }
 
     /// Helper: Bind input/trigger to a call to a given procedure.
@@ -108,13 +101,13 @@ impl<const BN: usize> Executor<BN> {
                 self.registers[register as usize] = value;
             }
             Opcode::Toggle(out_idx) => {
-                self.emit(Command::ToggleOutput(out_idx)).await;
+                self.emit(IOCommand::ToggleOutput(out_idx)).await;
             }
             Opcode::Activate(out_idx) => {
-                self.emit(Command::ActivateOutput(out_idx)).await;
+                self.emit(IOCommand::ActivateOutput(out_idx)).await;
             }
             Opcode::Deactivate(out_idx) => {
-                self.emit(Command::DeactivateOutput(out_idx)).await;
+                self.emit(IOCommand::DeactivateOutput(out_idx)).await;
             }
 
             // Enable a layer (TODO: push layer onto a layer stack?)
@@ -290,7 +283,16 @@ impl<const BN: usize> Executor<BN> {
                             Command::DeactivateLayer(_layer) => {
                                 todo!("deactivation is based on stack list");
                             }
-                            _ => self.emit(cmd).await,
+                            Command::Noop => {}
+                            Command::ToggleOutput(out) => {
+                                self.emit(IOCommand::ToggleOutput(out)).await;
+                            }
+                            Command::ActivateOutput(out) => {
+                                self.emit(IOCommand::ActivateOutput(out)).await;
+                            }
+                            Command::DeactivateOutput(out) => {
+                                self.emit(IOCommand::DeactivateOutput(out)).await;
+                            }
                         },
                         Action::Proc(proc_idx) => {
                             self.execute(proc_idx).await;
@@ -305,14 +307,14 @@ impl<const BN: usize> Executor<BN> {
                 self.execute(proc_idx).await;
             }
             Event::RemoteToggle(out_idx) => {
-                self.emit(Command::ToggleOutput(out_idx)).await;
+                self.emit(IOCommand::ToggleOutput(out_idx)).await;
             }
 
             Event::RemoteActivate(out_idx) => {
-                self.emit(Command::ActivateOutput(out_idx)).await;
+                self.emit(IOCommand::ActivateOutput(out_idx)).await;
             }
             Event::RemoteDeactivate(out_idx) => {
-                self.emit(Command::DeactivateOutput(out_idx)).await;
+                self.emit(IOCommand::DeactivateOutput(out_idx)).await;
             }
         }
     }
