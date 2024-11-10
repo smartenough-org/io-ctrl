@@ -7,10 +7,12 @@ use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
 use crate::boards::OutputChannel;
+use crate::components::interconnect::Interconnect;
 
 use crate::buttonsmash::consts::BINDINGS_COUNT;
-use crate::buttonsmash::{EventChannel, Executor, Opcode};
+use crate::buttonsmash::{Event, EventChannel, Executor, Opcode};
 use crate::io::event_converter::run_event_converter;
+use crate::io::events::Trigger;
 
 /// High-level command queue that are produced by executor.
 static EVENT_CHANNEL: EventChannel = EventChannel::new();
@@ -25,8 +27,9 @@ pub struct CtrlApp {
 
 impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
-        // let cmd_queue = CMD_QUEUE.init(CommandQueue::new());
-        let mut executor = Executor::new(&OUTPUT_CHANNEL);
+
+        // TODO: Pass interconnect? Or a queue?
+        let mut executor = Executor::new(&OUTPUT_CHANNEL, &board.interconnect);
         Self::configure(&mut executor).await;
 
         Self {
@@ -84,6 +87,7 @@ impl CtrlApp {
         let executor = unsafe { &mut *self.executor.get() };
         unwrap!(spawner.spawn(task_pump_switch_events_to_microvm(executor)));
         unwrap!(spawner.spawn(run_event_converter(self.board.input_q, &EVENT_CHANNEL)));
+        unwrap!(spawner.spawn(task_read_interconnect(&self.board.interconnect)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
@@ -112,8 +116,19 @@ impl CtrlApp {
     }
 }
 
-
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_pump_switch_events_to_microvm(executor: &'static mut Executor<BINDINGS_COUNT>) {
     executor.listen_events(&EVENT_CHANNEL).await;
+}
+
+#[embassy_executor::task(pool_size = 1)]
+pub async fn task_read_interconnect(interconnect: &'static Interconnect) {
+    loop {
+        let message = interconnect.receive().await;
+        defmt::info!("Received message {}", message);
+        // TODO: That's an example. Do a proper conversion.
+        EVENT_CHANNEL.send(
+            Event::new_button(32, Trigger::ShortClick)
+        ).await;
+    }
 }

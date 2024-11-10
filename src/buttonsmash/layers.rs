@@ -8,6 +8,12 @@ pub struct Layers {
     stack: [Option<(InIdx, LayerIdx)>; MAX_LAYER_STACK],
 }
 
+impl Default for Layers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Layers {
     pub fn new() -> Self {
         Self {
