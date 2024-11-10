@@ -10,6 +10,10 @@ use super::layers::Layers;
 use super::opcodes::Opcode;
 use crate::io::events::Trigger;
 use crate::boards::{IOCommand, OutputChannel};
+use crate::components::interconnect::{
+    Interconnect,
+    MessageType
+};
 
 /// Executes actions using a program.
 pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
@@ -19,7 +23,10 @@ pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
     procedures: [usize; MAX_PROCEDURES],
     /// List of registers that can hold ProcId numbers.
     registers: [u8; REGISTERS],
+
+    // Our outputs
     output_channel: &'static OutputChannel,
+    interconnect: &'static Interconnect,
 }
 
 enum MicroState {
@@ -34,7 +41,7 @@ enum MicroState {
 }
 
 impl<const BN: usize> Executor<BN> {
-    pub fn new(queue: &'static OutputChannel) -> Self {
+    pub fn new(queue: &'static OutputChannel, interconnect: &'static Interconnect) -> Self {
         Self {
             layers: Layers::new(),
             bindings: BindingList::new(),
@@ -42,6 +49,7 @@ impl<const BN: usize> Executor<BN> {
             procedures: [0; MAX_PROCEDURES],
             registers: [0; REGISTERS],
             output_channel: queue,
+            interconnect
         }
     }
 
@@ -55,10 +63,15 @@ impl<const BN: usize> Executor<BN> {
         self.layers.reset();
     }
 
+    /// Handle outputs from Executor.
     async fn emit(&self, command: IOCommand) {
         defmt::info!("Emiting from executor {:?}", command);
         // TODO: Maybe some timeout in case it breaks and we don't want to hang?
         self.output_channel.send(command).await;
+
+        // TODO: Handle nice messages
+        self.interconnect.transmit(MessageType::Announcement,
+                                   &[1, 2, 3, 4, 5, 6, 7, 8]).await;
     }
 
     /// Helper: Bind input/trigger to a call to a given procedure.
@@ -219,7 +232,7 @@ impl<const BN: usize> Executor<BN> {
                 MicroState::Continue => {}
                 MicroState::Stop => {
                     if stack_idx == 0 {
-                        // Nothing to return to.
+                        // Nothing to return to. Finish execution.
                         break;
                     }
                     stack_idx -= 1;

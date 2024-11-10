@@ -1,5 +1,8 @@
+///
+/// Represents the Hardware. Pretty much everything in this file is static,
+/// initialized once and available through the lifetime of a program.
+///
 use core::cell::UnsafeCell;
-use embassy_stm32::pac;
 
 use crate::boards::{common, io_router};
 use defmt::unwrap;
@@ -14,7 +17,7 @@ use embassy_sync::mutex::Mutex;
 use embassy_stm32::gpio::{Level, Output, Pin, Speed};
 
 use crate::io::{
-    events::IoIdx, events::InputChannel, expander_outputs, expander_switches,
+    events::InputChannel, events::IoIdx, expander_outputs, expander_switches,
     indexed_outputs::IndexedOutputs, pcf8575::Pcf8575,
 };
 
@@ -84,31 +87,8 @@ impl Board {
 
     pub fn assign_peripherals(p: embassy_stm32::Peripherals) -> Self {
         /* Initialize CAN */
-        // let mut can = can::Fdcan::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
-        let mut can = can::CanConfigurator::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
-
-        can.properties().set_extended_filter(
-            can::filter::ExtendedFilterSlot::_0,
-            can::filter::ExtendedFilter::accept_all_into_fifo1(),
-        );
-
-        // 250k bps
-        can.set_bitrate(250_000);
-
-        let dar1 = pac::FDCAN1.cccr().read().dar();
-        pac::FDCAN1.cccr().read().set_dar(false);
-        let dar2 = pac::FDCAN1.cccr().read().dar();
-
-        info!("BEF {} AFT {}", dar1, dar2);
-        // let can = can.into_normal_mode();
-
-        let dar1 = pac::FDCAN1.cccr().read().dar();
-        pac::FDCAN1.cccr().read().set_dar(false);
-        let dar2 = pac::FDCAN1.cccr().read().dar();
-
-        info!("BEF {} AFT {}", dar1, dar2);
-        // let interconnect = interconnect::Interconnect::new(can);
-        let interconnect = Interconnect::new();
+        let can = can::CanConfigurator::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
+        let interconnect = Interconnect::new(can);
 
         /* Initialize I²C and 16-bit port expanders */
         let i2c = I2c::new(
@@ -156,6 +136,7 @@ impl Board {
             ],
         ));
 
+        info!("Board initialized");
         Self {
             led: UnsafeCell::new(Output::new(p.PC6.degrade(), Level::Low, Speed::Low)),
             expander_switches,
@@ -169,7 +150,7 @@ impl Board {
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(task_interconnect(&self.interconnect)));
         unwrap!(spawner.spawn(task_expander_switches(&self.expander_switches)));
-        unwrap!(spawner.spawn(io_router::task_io_router(&self, self.io_command_q)));
+        unwrap!(spawner.spawn(io_router::task_io_router(self, self.io_command_q)));
     }
 
     pub fn led_on(&self) {
