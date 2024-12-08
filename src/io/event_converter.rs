@@ -18,10 +18,7 @@ const MAX_SHORT_MS: u32 = 300;
 */
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn run_event_converter(
-    input_q: &'static InputChannel,
-    output_q: &'static EventChannel,
-) {
+pub async fn run_event_converter(input_q: &'static InputChannel, output_q: &'static EventChannel) {
     loop {
         let input_event = input_q.receive().await;
         match input_event.state {
