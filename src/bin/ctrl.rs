@@ -26,8 +26,14 @@ pub async fn main(spawner: Spawner) {
     // Create board peripherals (early init)
     let board = BOARD.init(ctrl_board::Board::init());
 
-    // Wait for stabilization of power, peripherals, etc.
-    Timer::after(Duration::from_millis(50)).await;
+    // Fast initial blink to indicate that the firmware started. This also
+    // gives some time for power, peripherals, etc. to stabilize.
+    for _ in 1..5 {
+        Timer::after(Duration::from_millis(100)).await;
+        board.led_on();
+        Timer::after(Duration::from_millis(100)).await;
+        board.led_off();
+    }
 
     defmt::info!("Starting board");
 

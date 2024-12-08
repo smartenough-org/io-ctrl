@@ -1,5 +1,4 @@
 use core::cell::UnsafeCell;
-
 use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_stm32::uid;
@@ -7,7 +6,10 @@ use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
 use crate::boards::OutputChannel;
-use crate::components::interconnect::Interconnect;
+use crate::components::{
+    interconnect::Interconnect,
+    message::{args, Message},
+};
 
 use crate::buttonsmash::consts::BINDINGS_COUNT;
 use crate::buttonsmash::{Event, EventChannel, Executor, Opcode};
@@ -19,6 +21,7 @@ static EVENT_CHANNEL: EventChannel = EventChannel::new();
 /// Command Queue that connects Executor and IO Router.
 static OUTPUT_CHANNEL: OutputChannel = OutputChannel::new();
 
+/// Main application/business logic entrypoint.
 pub struct CtrlApp {
     /// For all IO needs (and comm peripherals like CAN and USB)
     pub board: &'static Board,
@@ -27,7 +30,6 @@ pub struct CtrlApp {
 
 impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
-
         // TODO: Pass interconnect? Or a queue?
         let mut executor = Executor::new(&OUTPUT_CHANNEL, &board.interconnect);
         Self::configure(&mut executor).await;
@@ -91,11 +93,23 @@ impl CtrlApp {
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
+        defmt::info!("Starting app on chip {}", uid::uid());
+
+        let welcome_message = Message::Info {
+            code: args::InfoCode::Started.to_bytes(),
+            arg: 0,
+        };
+        self.board
+            .interconnect
+            .transmit_response(&welcome_message)
+            .await;
+
+        // This might fail within tasks on i²c/CAN communication with expanders.
         self.spawn_tasks(spawner);
 
         defmt::info!("Starting app on chip {}", uid::uid());
         loop {
-            // defmt::info!("Main app tick");
+            // Steady blinking to indicate we are alive and ok.
             Timer::after(Duration::from_millis(1000)).await;
             self.board.led_on();
             Timer::after(Duration::from_millis(1000)).await;
@@ -126,9 +140,10 @@ pub async fn task_read_interconnect(interconnect: &'static Interconnect) {
     loop {
         let message = interconnect.receive().await;
         defmt::info!("Received message {}", message);
+
         // TODO: That's an example. Do a proper conversion.
-        EVENT_CHANNEL.send(
-            Event::new_button(32, Trigger::ShortClick)
-        ).await;
+        EVENT_CHANNEL
+            .send(Event::new_button(32, Trigger::ShortClick))
+            .await;
     }
 }

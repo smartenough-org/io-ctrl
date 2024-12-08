@@ -1,4 +1,4 @@
-use crate::io::events::{self, IoIdx, InputChannel};
+use crate::io::events::{self, InputChannel, IoIdx};
 use crate::io::pcf8575::Pcf8575;
 use core::{
     cell::RefCell,

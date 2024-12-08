@@ -1,26 +1,11 @@
+use crate::components::message::MessageRaw;
+use crate::config::LOCAL_ADDRESS;
 use defmt::*;
 use embassy_stm32::can;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
-use crate::config::LOCAL_ADDRESS;
 
-/// Messages passed
-pub enum MessageType {
-    /// I'm doing something and maybe someone wants to know.
-    Announcement,
-    /// Erroneous situation happened.
-    Error,
-    /// Periodic not triggered by event status.
-    Status,
-
-    /// TODO: We will need something for OTA config updates.
-    /// To whom this may concern (device ID), total length of OTA
-    MicrocodeUpdateInit,
-    /// Part of binary code for upgrade.
-    MicrocodeUpdatePart,
-    /// CRC, apply if matches.
-    MicrocodeUpdateEnd,
-}
+use super::message::Message;
 
 pub struct Interconnect
 //where
@@ -35,7 +20,6 @@ static USE_LOOPBACK: bool = true;
 
 impl Interconnect {
     pub fn new(mut can: can::CanConfigurator<'static>) -> Self {
-
         let mode = if USE_LOOPBACK {
             can::OperatingMode::InternalLoopbackMode
         } else {
@@ -55,33 +39,64 @@ impl Interconnect {
         }
     }
 
-    pub async fn receive(&self) -> u8 {
+    pub async fn receive(&self) -> Result<MessageRaw, ()> {
         let start = embassy_time::Instant::now();
         let mut can = self.can_rx.lock().await;
         match can.read().await {
             Ok(envelope) => {
                 let (ts, rx_frame) = (envelope.ts, envelope.frame);
+                let header = rx_frame.header();
+                let addr: u16 = match header.id() {
+                    embedded_can::Id::Extended(_id) => {
+                        defmt::info!("Got extended CAN frame - ignoring");
+                        return Err(());
+                    }
+                    embedded_can::Id::Standard(id) => id.as_raw(),
+                };
+
                 let delta = (ts - start).as_millis();
                 info!(
-                    "Rx: {} {:02x} --- {}ms",
-                    rx_frame.header().len(),
+                    "Rx: addr={:#02x} len={} {:02x} --- {}ms",
+                    addr,
+                    header.len(),
                     rx_frame.data()[0..rx_frame.header().len() as usize],
                     delta,
-                )
+                );
+                Ok(MessageRaw::from_can(addr, rx_frame.data()))
             }
-            Err(_err) => error!("Error in frame"),
+            Err(_err) => {
+                error!("Error in frame");
+                Err(())
+            }
         }
-
-        69
     }
 
-    /// Schedule transmission of a interconnect message.
-    pub async fn transmit(&self, _msg_type: MessageType, _data: &[u8; 8]) {
+    async fn transmit_standard(&self, raw: &MessageRaw) {
         let mut can = self.can_tx.lock().await;
-        let address = 0x123456F;
-        let msg = [0; 8];
-        let frame = can::frame::Frame::new_extended(address, &msg).unwrap();
+        // RTR False
+        let standard_id =
+            embedded_can::StandardId::new(raw.to_can_addr()).expect("This should create a message");
+        let id = embedded_can::Id::Standard(standard_id);
+        let hdr = can::frame::Header::new(id, raw.length(), false);
+        let frame = can::frame::Frame::new(hdr, raw.data_as_array()).unwrap();
+        info!(
+            "Trnsmitting {:?} {:#02x} {:?}",
+            raw,
+            raw.to_can_addr(),
+            frame
+        );
         _ = can.write(&frame).await;
+    }
+
+    /// Schedule transmission of a interconnect message - from this node.
+    pub async fn transmit_response(&self, msg: &Message) {
+        let raw = msg.to_raw(LOCAL_ADDRESS);
+        self.transmit_standard(&raw).await;
+    }
+
+    pub async fn transmit_request(&self, dst_addr: u8, msg: &Message) {
+        let raw = msg.to_raw(dst_addr);
+        self.transmit_standard(&raw).await;
     }
 
     /// Run task that receives messages and pushes relevant into queue.

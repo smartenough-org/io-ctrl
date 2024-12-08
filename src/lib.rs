@@ -14,5 +14,5 @@ pub mod app;
 pub mod boards;
 pub mod buttonsmash;
 pub mod components;
-pub mod io;
 pub mod config;
+pub mod io;

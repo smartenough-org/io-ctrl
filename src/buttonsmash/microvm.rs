@@ -2,18 +2,19 @@
 TODO: We lack the ability to toggle a group on/off if say one lamp from the group is
 already enabled.
 */
+
 use super::bindings::*;
 use super::consts::{
     Command, Event, EventChannel, InIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS,
 };
 use super::layers::Layers;
 use super::opcodes::Opcode;
-use crate::io::events::Trigger;
 use crate::boards::{IOCommand, OutputChannel};
-use crate::components::interconnect::{
-    Interconnect,
-    MessageType
+use crate::components::{
+    interconnect::Interconnect,
+    message::{args, Message},
 };
+use crate::io::events::Trigger;
 
 /// Executes actions using a program.
 pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
@@ -49,7 +50,7 @@ impl<const BN: usize> Executor<BN> {
             procedures: [0; MAX_PROCEDURES],
             registers: [0; REGISTERS],
             output_channel: queue,
-            interconnect
+            interconnect,
         }
     }
 
@@ -66,12 +67,28 @@ impl<const BN: usize> Executor<BN> {
     /// Handle outputs from Executor.
     async fn emit(&self, command: IOCommand) {
         defmt::info!("Emiting from executor {:?}", command);
+
+        let message = match &command {
+            IOCommand::ToggleOutput(out) => Message::OutputChanged {
+                output: *out,
+                // TODO: Add absolute data
+                state: args::OutputState::Toggle,
+            },
+            IOCommand::ActivateOutput(out) => Message::OutputChanged {
+                output: *out,
+                state: args::OutputState::On,
+            },
+            IOCommand::DeactivateOutput(out) => Message::OutputChanged {
+                output: *out,
+                state: args::OutputState::Off,
+            },
+        };
+
         // TODO: Maybe some timeout in case it breaks and we don't want to hang?
         self.output_channel.send(command).await;
 
-        // TODO: Handle nice messages
-        self.interconnect.transmit(MessageType::Announcement,
-                                   &[1, 2, 3, 4, 5, 6, 7, 8]).await;
+        // Transmit information over CAN
+        self.interconnect.transmit_response(&message).await;
     }
 
     /// Helper: Bind input/trigger to a call to a given procedure.
