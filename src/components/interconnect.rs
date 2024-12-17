@@ -80,7 +80,7 @@ impl Interconnect {
         let hdr = can::frame::Header::new(id, raw.length(), false);
         let frame = can::frame::Frame::new(hdr, raw.data_as_array()).unwrap();
         info!(
-            "Trnsmitting {:?} {:#02x} {:?}",
+            "Transmitting {:?} {:#02x} {:?}",
             raw,
             raw.to_can_addr(),
             frame

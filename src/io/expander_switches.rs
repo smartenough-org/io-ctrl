@@ -1,3 +1,4 @@
+use crate::components::status::{self, Status};
 use crate::io::events::{self, InputChannel, IoIdx};
 use crate::io::pcf8575::Pcf8575;
 use core::{
@@ -18,7 +19,10 @@ pub struct ExpanderSwitches<BUS: I2c> {
     // We output events into this queue.
     queue: &'static InputChannel,
 
+    /// Internal error counter that will cause panic if unreachable for too long.
     errors: AtomicU16,
+
+    status: &'static Status,
 }
 
 impl<BUS: I2c> ExpanderSwitches<BUS> {
@@ -26,13 +30,26 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
         expander: Pcf8575<BUS>,
         io_indices: [IoIdx; 16],
         queue: &'static InputChannel,
+        status: &'static Status,
     ) -> Self {
         Self {
             io_indices,
             expander: RefCell::new(expander),
             queue,
             errors: AtomicU16::new(0),
+            status,
         }
+    }
+
+    async fn transmit(&self, event: events::SwitchEvent) {
+        // TODO: Update embassy-sync and use is_full()
+        if self.queue.try_send(event.clone()).is_ok() {
+            return;
+        }
+        self.status.is_warning();
+        status::COUNTERS.input_queue_full.inc();
+        defmt::error!("Input event queue is full! Might block");
+        self.queue.send(event).await;
     }
 
     /// Active scanner loop that observes the expander and generates events when input changes.
@@ -56,11 +73,12 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
         loop {
             if !initialized {
                 // Initialize pins to outputs.
-                if let Ok(_) = expander.write(0xffff).await {
+                if expander.write(0xffff).await.is_ok() {
                     initialized = true;
                 } else {
-                    let errs = self.errors.load(Ordering::Relaxed) + 1;
-                    self.errors.store(errs, Ordering::Relaxed);
+                    status::COUNTERS.expander_input_error.inc();
+                    self.status.is_warning();
+                    let errs = self.errors.fetch_add(1, Ordering::Relaxed);
                     defmt::error!("Unable to configure expander. Errors={}", errs);
                     if errs > 60 {
                         defmt::panic!("Expander connection seems dead after {} errors", errs);
@@ -93,28 +111,24 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
 
                 if value == ACTIVE_LEVEL {
                     /* Switch is pressed (or maybe noise/contact bouncing) */
-                    if state[idx] != u16::MAX {
-                        state[idx] += 1;
-                    }
+                    let _ = state[idx].saturating_add(1);
 
                     if state[idx] == MIN_TIME {
                         /* Just activated */
                         defmt::info!("ACTIVATED {}", idx);
-                        self.queue
-                            .send(events::SwitchEvent {
-                                switch_id: self.io_indices[idx],
-                                state: events::SwitchState::Activated,
-                            })
-                            .await;
+                        self.transmit(events::SwitchEvent {
+                            switch_id: self.io_indices[idx],
+                            state: events::SwitchState::Activated,
+                        })
+                        .await;
                     } else if state[idx] > MIN_TIME {
                         /* Was activated and still is active */
                         let time_active = LOOP_WAIT_MS * (state[idx] as u32);
-                        self.queue
-                            .send(events::SwitchEvent {
-                                switch_id: self.io_indices[idx],
-                                state: events::SwitchState::Active(time_active),
-                            })
-                            .await;
+                        self.transmit(events::SwitchEvent {
+                            switch_id: self.io_indices[idx],
+                            state: events::SwitchState::Active(time_active),
+                        })
+                        .await;
                     } else {
                         /* Not yet active */
                         defmt::info!("active level state idx={} state={}", idx, state[idx]);
@@ -124,12 +138,11 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                         /* Was active, now it just got deactivated */
                         let time_active = LOOP_WAIT_MS * (state[idx] as u32);
                         defmt::info!("DEACTIVATED {} after {}ms", idx, time_active);
-                        self.queue
-                            .send(events::SwitchEvent {
-                                switch_id: self.io_indices[idx],
-                                state: events::SwitchState::Deactivated(time_active),
-                            })
-                            .await;
+                        self.transmit(events::SwitchEvent {
+                            switch_id: self.io_indices[idx],
+                            state: events::SwitchState::Deactivated(time_active),
+                        })
+                        .await;
                     }
                     state[idx] = 0;
                     continue;

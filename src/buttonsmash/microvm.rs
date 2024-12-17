@@ -10,6 +10,7 @@ use super::consts::{
 use super::layers::Layers;
 use super::opcodes::Opcode;
 use crate::boards::{IOCommand, OutputChannel};
+use crate::components::status;
 use crate::components::{
     interconnect::Interconnect,
     message::{args, Message},
@@ -85,7 +86,11 @@ impl<const BN: usize> Executor<BN> {
         };
 
         // TODO: Maybe some timeout in case it breaks and we don't want to hang?
-        self.output_channel.send(command).await;
+        if self.output_channel.try_send(command.clone()).is_err() {
+            defmt::error!("Output channel is full! Hanging.");
+            status::COUNTERS.input_queue_full.inc();
+            self.output_channel.send(command.clone()).await;
+        }
 
         // Transmit information over CAN
         self.interconnect.transmit_response(&message).await;

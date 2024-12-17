@@ -1,11 +1,11 @@
-use crate::boards::ctrl_board::Board;
 use crate::io::events::IoIdx;
+use crate::{boards::ctrl_board::Board, components::status};
 use defmt::Format;
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
 
 pub type OutIdx = u8;
 
-#[derive(Debug, Eq, PartialEq, Format)]
+#[derive(Debug, Eq, PartialEq, Format, Clone)]
 pub enum IOCommand {
     /// Toggle output...
     ToggleOutput(OutIdx),
@@ -23,7 +23,11 @@ pub async fn task_io_router(board: &'static Board, cmd_queue: &'static OutputCha
     /* All initially disabled (in low-state enabled devices) */
     let mut output_state: [bool; 32] = [true; 32];
     for n in 1..=16 {
-        board.set_output(n as IoIdx, true).await.unwrap();
+        if board.set_output(n as IoIdx, true).await.is_err() {
+            defmt::error!("Unable to initialize output IO. Expander failure?");
+            status::COUNTERS.expander_output_error.inc();
+            board.status.is_warning();
+        }
     }
 
     loop {
@@ -32,25 +36,32 @@ pub async fn task_io_router(board: &'static Board, cmd_queue: &'static OutputCha
         let command = cmd_queue.receive().await;
         defmt::info!("IORouter got command: {:?}", command);
 
+        board.status.is_active();
+
         // TODO: Unwraps - make it soft.
-        match command {
+        let result = match command {
             IOCommand::ToggleOutput(idx) => {
                 output_state[idx as usize] = !output_state[idx as usize];
-                board
-                    .set_output(idx, output_state[idx as usize])
-                    .await
-                    .unwrap();
+                board.set_output(idx, output_state[idx as usize]).await
             }
             IOCommand::ActivateOutput(idx) => {
                 // Low-state activate
-                board.set_output(idx, false).await.unwrap();
                 output_state[idx as usize] = false;
+                board.set_output(idx, false).await
             }
             IOCommand::DeactivateOutput(idx) => {
                 // Low-state activate
-                board.set_output(idx, true).await.unwrap();
                 output_state[idx as usize] = true;
+                board.set_output(idx, true).await
             }
+        };
+        if result.is_err() {
+            defmt::error!(
+                "Unable to configure output (expander failure?): {}",
+                command
+            );
+            status::COUNTERS.expander_output_error.inc();
+            board.status.is_warning();
         }
     }
 }
