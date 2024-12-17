@@ -132,10 +132,99 @@ pub async fn task_pump_switch_events_to_microvm(executor: &'static mut Executor<
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_read_interconnect(interconnect: &'static Interconnect) {
+pub async fn task_read_interconnect(board: &'static Board) {
     loop {
-        let message = interconnect.receive().await;
-        defmt::info!("Received message {}", message);
+        let raw = board.interconnect.receive().await;
+        defmt::info!("Received raw message {}", raw);
+
+        let message = if let Ok(raw) = raw {
+            let maybe = Message::from_raw(raw);
+            if let Ok(message) = maybe {
+                message
+            } else {
+                continue;
+            }
+        } else {
+            defmt::warn!("Error while reading a message {:?}", raw);
+            continue;
+        };
+
+        match message {
+            Message::CallProcedure { proc_id } => {
+                defmt::warn!("TODO: Call procedure {}", proc_id);
+            }
+
+            Message::TriggerInput { input, trigger } => {
+                defmt::warn!("TODO: Trigger input {} as {:?}", input, trigger);
+            }
+
+            Message::SetOutput { output, state } => {
+                defmt::warn!("TODO: Trigger output {} to {:?}", output, state);
+            }
+
+            Message::TimeAnnouncement {
+                year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                day_of_week,
+            } => {
+                let dow = match day_of_week {
+                    0 => DayOfWeek::Monday,
+                    1 => DayOfWeek::Tuesday,
+                    2 => DayOfWeek::Wednesday,
+                    3 => DayOfWeek::Thursday,
+                    4 => DayOfWeek::Friday,
+                    5 => DayOfWeek::Saturday,
+                    6 => DayOfWeek::Sunday,
+                    _ => {
+                        defmt::warn!(
+                            "Invalid date of week specified in time announcement {}",
+                            day_of_week
+                        );
+                        continue;
+                    }
+                };
+                let dt = DateTime::from(year, month, day, dow, hour, minute, second);
+
+                match dt {
+                    Ok(dt) => {
+                        if board.set_time(dt).await.is_err() {
+                            defmt::error!("RTC returned an error - unable to set time");
+                        } else {
+                            defmt::info!("Time was set.");
+                        }
+                    }
+                    Err(_err) => {
+                        defmt::error!(
+                            "Unable to decode time from {}-{}-{} {} {}:{}:{}.",
+                            year,
+                            month,
+                            day,
+                            day_of_week,
+                            hour,
+                            minute,
+                            second
+                        );
+                    }
+                }
+            }
+
+            Message::RequestStatus => {
+                defmt::info!("TODO: Send our status");
+            }
+
+            // Those are not required on endpoints.
+            Message::Error { .. }
+            | Message::Info { .. }
+            | Message::OutputChanged { .. }
+            | Message::InputTriggered { .. }
+            | Message::Status { .. } => {
+                defmt::info!("Got unhandled message, ignoring: {:?}", message);
+            }
+        }
 
         // TODO: That's an example. Do a proper conversion.
         EVENT_CHANNEL

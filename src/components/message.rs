@@ -28,10 +28,12 @@ mod msg_type {
 
     /// Set output X to Y (or invert state)
     pub const SET_OUTPUT: u8 = 0x08;
+    /// Simulate input trigger, just like if the user presses the button.
+    pub const TRIGGER_INPUT: u8 = 0x09;
     /// Call a predefined procedure in VM.
-    pub const CALL_PROC: u8 = 0x09;
+    pub const CALL_PROC: u8 = 0x0A;
     /// `Ping` of sorts.
-    pub const REQUEST_STATUS: u8 = 0x0A;
+    pub const REQUEST_STATUS: u8 = 0x0D;
 
     /// Periodic not triggered by an event status.
     pub const STATUS: u8 = 0x10;
@@ -95,9 +97,28 @@ pub mod args {
             }
         }
     }
+
+    impl Trigger {
+        pub fn to_bytes(self) -> u8 {
+            self as u8
+        }
+
+        pub fn from_u8(raw: u8) -> Result<Self, ()> {
+            match raw {
+                0 => Ok(Trigger::ShortClick),
+                1 => Ok(Trigger::LongClick),
+                2 => Ok(Trigger::Activated),
+                3 => Ok(Trigger::Deactivated),
+                4 => Ok(Trigger::LongActivated),
+                5 => Ok(Trigger::LongDeactivated),
+                _ => Err(()),
+            }
+        }
+    }
 }
 
 /// This holds the decoded message internally.
+#[derive(defmt::Format)]
 pub enum Message {
     // Start with rare important events.
     /// Erroneous situation happened. Includes error code.
@@ -119,6 +140,11 @@ pub enum Message {
     SetOutput {
         output: OutIdx,
         state: args::OutputState,
+    },
+
+    TriggerInput {
+        input: InIdx,
+        trigger: args::Trigger,
     },
 
     /// Ping. TODO: Handle RTR?
@@ -244,6 +270,18 @@ impl Message {
                     state,
                 })
             }
+            msg_type::TRIGGER_INPUT => {
+                if raw.length != 2 {
+                    defmt::warn!("Trigger input has an invalid message length {:?}", raw);
+                    return Err(());
+                }
+
+                let trigger = args::Trigger::from_u8(raw.data[1])?;
+                Ok(Message::TriggerInput {
+                    input: raw.data[0],
+                    trigger,
+                })
+            }
             msg_type::CALL_PROC => {
                 if raw.length != 1 {
                     defmt::warn!("Call proc has invalid message length {:?}", raw);
@@ -269,6 +307,17 @@ impl Message {
             }
 
             msg_type::REQUEST_STATUS => Ok(Message::RequestStatus),
+
+            msg_type::INFO | msg_type::ERROR | msg_type::STATUS => {
+                defmt::info!("Ignoring info/error/status message: {:?}", raw);
+                return Err(());
+            }
+
+            msg_type::OUTPUT_CHANGED | msg_type::INPUT_TRIGGERED => {
+                defmt::info!("Ignoring output/input change message {:?}", raw);
+                return Err(());
+            }
+
             _ => {
                 // TBH, probably safe to ignore.
                 defmt::warn!("Unable to parse unhandled message type {:?}", raw);
