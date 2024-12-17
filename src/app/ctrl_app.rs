@@ -1,15 +1,13 @@
 use core::cell::UnsafeCell;
 use defmt::unwrap;
 use embassy_executor::Spawner;
+use embassy_stm32::rtc::{DateTime, DayOfWeek};
 use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
-use crate::boards::OutputChannel;
-use crate::components::{
-    interconnect::Interconnect,
-    message::{args, Message},
-};
+use crate::components::message::{args, Message};
+use crate::components::status;
 
 use crate::buttonsmash::consts::BINDINGS_COUNT;
 use crate::buttonsmash::{Event, EventChannel, Executor, Opcode};
@@ -18,8 +16,6 @@ use crate::io::events::Trigger;
 
 /// High-level command queue that are produced by executor.
 static EVENT_CHANNEL: EventChannel = EventChannel::new();
-/// Command Queue that connects Executor and IO Router.
-static OUTPUT_CHANNEL: OutputChannel = OutputChannel::new();
 
 /// Main application/business logic entrypoint.
 pub struct CtrlApp {
@@ -31,7 +27,7 @@ pub struct CtrlApp {
 impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
         // TODO: Pass interconnect? Or a queue?
-        let mut executor = Executor::new(&OUTPUT_CHANNEL, &board.interconnect);
+        let mut executor = Executor::new(&board.io_command_q, &board.interconnect);
         Self::configure(&mut executor).await;
 
         Self {
@@ -89,7 +85,7 @@ impl CtrlApp {
         let executor = unsafe { &mut *self.executor.get() };
         unwrap!(spawner.spawn(task_pump_switch_events_to_microvm(executor)));
         unwrap!(spawner.spawn(run_event_converter(self.board.input_q, &EVENT_CHANNEL)));
-        unwrap!(spawner.spawn(task_read_interconnect(&self.board.interconnect)));
+        unwrap!(spawner.spawn(task_read_interconnect(&self.board)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
@@ -99,6 +95,7 @@ impl CtrlApp {
             code: args::InfoCode::Started.to_bytes(),
             arg: 0,
         };
+
         self.board
             .interconnect
             .transmit_response(&welcome_message)
@@ -110,10 +107,9 @@ impl CtrlApp {
         defmt::info!("Starting app on chip {}", uid::uid());
         loop {
             // Steady blinking to indicate we are alive and ok.
-            Timer::after(Duration::from_millis(1000)).await;
-            self.board.led_on();
-            Timer::after(Duration::from_millis(1000)).await;
-            self.board.led_off();
+
+            defmt::info!("Tick: {:?}", status::COUNTERS);
+            Timer::after(Duration::from_millis(5000)).await;
 
             /*
             let ir_reg = pac::FDCAN1.ir().read();

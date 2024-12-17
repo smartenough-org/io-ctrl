@@ -2,11 +2,11 @@
 /// Represents the Hardware. Pretty much everything in this file is static,
 /// initialized once and available through the lifetime of a program.
 ///
-use core::cell::UnsafeCell;
-
 use crate::boards::{common, io_router};
+use crate::components::status::Status;
 use defmt::unwrap;
 use embassy_executor::Spawner;
+use embassy_stm32::rtc::{DateTime, Rtc, RtcConfig, RtcError};
 
 use crate::components::interconnect::Interconnect;
 
@@ -44,6 +44,8 @@ type ExpanderOutputs = expander_outputs::ExpanderOutputs<SharedI2C>;
 
 static I2C_BUS: StaticCell<Mutex<NoopRawMutex, AsyncI2C>> = StaticCell::new();
 
+static STATUS: StaticCell<Status> = StaticCell::new();
+
 /// A queue that aggregates all hardware event sources (expanders, native IOs, etc).
 /// It's later consumed by EventConverter.
 static INPUT_CHANNEL: InputChannel = InputChannel::new();
@@ -53,13 +55,10 @@ static OUTPUT_CHANNEL: io_router::OutputChannel = io_router::OutputChannel::new(
 
 /// Represents our µC hardware interface. It's 'static and shared by most code.
 pub struct Board {
-    // ? UnsafeCell? For led maybe ok.
-    led: UnsafeCell<Output<'static>>,
+    // FIXME: ? UnsafeCell? For led maybe ok.
+    // led: UnsafeCell<Output<'static>>,
+    pub status: &'static Status,
 
-    /* FIXME: Would be better if all Refcells were private and accessible within a func-call */
-    /// Handle physical outputs - relays, SSRs, etc.
-    // pub outputs: RefCell<io::IOIndex<32, ExpanderPin>>,
-    // pub expander_outputs: ExpanderOutputs,
     /// Handle physical switches - inputs.
     pub expander_switches: ExpanderSwitches,
 
@@ -73,6 +72,9 @@ pub struct Board {
 
     /// CAN communication between the layers.
     pub interconnect: Interconnect,
+
+    /// On board RTC.
+    pub rtc: Mutex<NoopRawMutex, Rtc>,
 }
 
 impl Board {
@@ -86,6 +88,10 @@ impl Board {
     }
 
     pub fn assign_peripherals(p: embassy_stm32::Peripherals) -> Self {
+        /* Basics */
+        let led = Output::new(p.PC6.degrade(), Level::Low, Speed::Low);
+        let status = STATUS.init(Status::new(led));
+
         /* Initialize CAN */
         let can = can::CanConfigurator::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
         let interconnect = Interconnect::new(can);
@@ -118,6 +124,7 @@ impl Board {
             inputs,
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
             &INPUT_CHANNEL,
+            status,
         );
 
         let expander_outputs = ExpanderOutputs::new(outputs);
@@ -136,37 +143,81 @@ impl Board {
             ],
         ));
 
+        let rtc = Rtc::new(p.RTC, RtcConfig::default());
+
         info!("Board initialized");
         Self {
-            led: UnsafeCell::new(Output::new(p.PC6.degrade(), Level::Low, Speed::Low)),
+            // led: UnsafeCell::new(
             expander_switches,
             indexed_outputs,
             interconnect,
+            status,
+            rtc: Mutex::new(rtc),
             input_q: &INPUT_CHANNEL,
             io_command_q: &OUTPUT_CHANNEL,
         }
     }
 
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
+        unwrap!(spawner.spawn(task_status(&self.status)));
         unwrap!(spawner.spawn(task_interconnect(&self.interconnect)));
         unwrap!(spawner.spawn(task_expander_switches(&self.expander_switches)));
         unwrap!(spawner.spawn(io_router::task_io_router(self, self.io_command_q)));
     }
 
-    pub fn led_on(&self) {
-        /* Only this class uses it and we are single cpu */
-        let led = unsafe { &mut *self.led.get() };
-        led.set_high();
-    }
-
-    pub fn led_off(&self) {
-        let led = unsafe { &mut *self.led.get() };
-        led.set_low();
-    }
-
     pub async fn set_output(&self, idx: IoIdx, state: bool) -> Result<(), ()> {
         // TODO: Try few times; count errors; panic after some threshold.
         self.indexed_outputs.lock().await.set(idx, state).await
+    }
+
+    /// Read time from RTC.
+    pub async fn read_time(&self) -> DateTime {
+        let rtc = self.rtc.lock().await;
+        match rtc.now() {
+            Ok(dt) => dt,
+            Err(_rtc_err) => {
+                defmt::error!("Error while reading RTC.");
+
+                /*
+                // This serves to get an increasing time in case of RTC failure
+                // But requires some base that is not there yet.
+                let elapsed = self.boot_time.elapsed().as_secs();
+                let years = elapsed / (365 * 24 * 60 * 60);
+                let elapsed = elapsed - years * (365 * 24 * 60 * 60);
+
+                let months = elapsed / (31 * 24 * 60 * 60); /* This is very rough */
+                let elapsed = elapsed - months * (31 * 24 * 60 * 60);
+
+                let days = elapsed / (24 * 60 * 60);
+                let elapsed = elapsed - days * (24 * 60 * 60);
+
+                let hours = elapsed / (60 * 60);
+                let elapsed = elapsed - hours * (60 * 60);
+
+                let minutes = elapsed / 60;
+                let seconds = elapsed - minutes * 60;
+                */
+
+                let dt = DateTime::from(
+                    2025,
+                    1,
+                    1,
+                    embassy_stm32::rtc::DayOfWeek::Wednesday,
+                    00,
+                    00,
+                    00,
+                )
+                .expect("This should work");
+
+                dt
+            }
+        }
+    }
+
+    /// Set time to RTC.
+    pub async fn set_time(&self, dt: DateTime) -> Result<(), RtcError> {
+        let mut rtc = self.rtc.lock().await;
+        rtc.set_datetime(dt)
     }
 }
 
@@ -178,4 +229,9 @@ pub async fn task_expander_switches(switches: &'static ExpanderSwitches) {
 #[embassy_executor::task]
 pub async fn task_interconnect(interconnect: &'static Interconnect) {
     interconnect.run().await
+}
+
+#[embassy_executor::task]
+pub async fn task_status(status: &'static Status) {
+    status.update_loop().await
 }

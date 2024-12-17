@@ -55,13 +55,15 @@ mod msg_type {
 }
 
 pub mod args {
-    #[derive(Clone, Copy)]
+    pub use crate::io::events::Trigger;
+
+    #[derive(Clone, Copy, defmt::Format)]
     #[repr(u16)]
     pub enum InfoCode {
         Started = 10,
     }
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, defmt::Format)]
     #[repr(u8)]
     pub enum OutputState {
         Off = 0,

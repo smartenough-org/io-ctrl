@@ -4,7 +4,7 @@ use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
 pub type IoIdx = u8;
 
 /// Debounced Input switch state
-#[derive(Format)]
+#[derive(Format, Clone)]
 pub enum SwitchState {
     /// Just pressed (after debouncing period)
     Activated,
@@ -15,7 +15,7 @@ pub enum SwitchState {
 }
 
 /// Event transmitted over a channel
-#[derive(Format)]
+#[derive(Format, Clone)]
 pub struct SwitchEvent {
     pub switch_id: IoIdx,
     pub state: SwitchState,
@@ -25,10 +25,11 @@ pub struct SwitchEvent {
 /// eg. Activated -> LongActivated -> LongClick -> LongDeactivated -> Deactivated.
 /// Activated -> ShortClick -> Deactivated
 #[derive(Copy, Clone, Eq, PartialEq, Format)]
+#[repr(u8)]
 pub enum Trigger {
     /// Short click activation; longer than debounce period, but shorter than a
     /// long click. Triggered on deactivation.
-    ShortClick,
+    ShortClick = 0,
     /// Longer than a short click. Triggered on deactivation.
     LongClick,
     /// Triggered right after debouncing period is over.

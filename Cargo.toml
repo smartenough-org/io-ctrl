@@ -6,6 +6,21 @@ license = "GPL-3.0-or-later"
 default-run = "ctrl"
 default-build = "ctrl"
 
+[features]
+default = []
+
+# Selects the CAN bus address of the device (see config.rs)
+# Main / gate
+bus-dev-gate = []
+# main 1st floor
+bus-dev-1 = []
+# dining room 1st floor
+bus-dev-2 = []
+# west 2nd floor
+bus-dev-3 = []
+# east 2nd floor
+bus-dev-4 = []
+
 [dependencies]
 # Basic set
 embassy-futures = { version = "0.1.1" }

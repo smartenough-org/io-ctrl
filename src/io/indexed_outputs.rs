@@ -60,9 +60,9 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
                 let io_within = io_within as u8;
                 // TODO: This unwrap will kill program if there's no IO to be set (no PCF)
                 if high {
-                    expander.set_high(io_within).await.unwrap();
+                    expander.set_high(io_within).await?
                 } else {
-                    expander.set_low(io_within).await.unwrap();
+                    expander.set_low(io_within).await?
                 }
             }
 
@@ -71,13 +71,5 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
             defmt::error!("Unable to find output with ID {}", io_idx);
             Err(())
         }
-    }
-
-    pub async fn set_high(&mut self, idx: IoIdx) -> Result<(), ()> {
-        self.set(idx, true).await
-    }
-
-    pub async fn set_low(&mut self, idx: IoIdx) -> Result<(), ()> {
-        self.set(idx, false).await
     }
 }
