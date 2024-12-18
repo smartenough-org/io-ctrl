@@ -99,6 +99,8 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                 // Reading failed. If intermittent, we can accept it.
                 let errs = self.errors.load(Ordering::Relaxed) + 1;
                 self.errors.store(errs, Ordering::Relaxed);
+                status::COUNTERS.expander_input_error.inc();
+                self.status.is_warning();
                 defmt::error!("Unable to read expander. Errors={}", errs);
                 if errs > 60 {
                     defmt::panic!("Expander connection seems dead after {} errors", errs);
@@ -111,7 +113,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
 
                 if value == ACTIVE_LEVEL {
                     /* Switch is pressed (or maybe noise/contact bouncing) */
-                    let _ = state[idx].saturating_add(1);
+                    state[idx] = state[idx].saturating_add(1);
 
                     if state[idx] == MIN_TIME {
                         /* Just activated */

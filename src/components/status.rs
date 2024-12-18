@@ -17,6 +17,10 @@ impl Counter {
     pub fn inc(&self) -> u32 {
         self.0.fetch_add(1, Ordering::Relaxed)
     }
+
+    pub fn get(&self) -> u32 {
+        self.0.load(Ordering::Relaxed)
+    }
 }
 
 impl defmt::Format for Counter {
@@ -46,6 +50,16 @@ pub static COUNTERS: Counters = Counters {
     expander_output_error: Counter::new(),
 };
 
+impl Counters {
+    /// Has any problem been detected?
+    pub fn has_problem(&self) -> bool {
+        self.input_queue_full.get() > 0
+            || self.output_queue_full.get() > 0
+            || self.expander_input_error.get() > 0
+            || self.expander_output_error.get() > 0
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, defmt::Format)]
 pub enum Blink {
     /// Just started
@@ -70,7 +84,7 @@ impl Blink {
             // Special internal
             Blink::Init => (200, 200, 3),
             Blink::Idle => (10, 3000, 0),
-            Blink::Attention => (50, 3000, 0),
+            Blink::Attention => (300, 3000, 0),
         };
         (Duration::from_millis(on), Duration::from_millis(off), count)
     }
@@ -148,10 +162,13 @@ impl Status {
             self.read_wait(off_t, &mut on_t, &mut off_t, &mut count)
                 .await;
 
-            // When we reach count 1 - get back to blinking the idle time. Count 0 means forever.
-            if count == 1 {
-                (on_t, off_t, count) = Blink::Idle.to_time();
-                info!("System status: Going back to idle");
+            // When we reach count 0 - get back to blinking the idle/attention time. Count 0 means forever.
+            if count == 0 {
+                if COUNTERS.has_problem() {
+                    (on_t, off_t, count) = Blink::Attention.to_time();
+                } else {
+                    (on_t, off_t, count) = Blink::Idle.to_time();
+                }
             } else {
                 count -= 1;
             }
