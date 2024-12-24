@@ -1,5 +1,5 @@
 /*
- * Main entry point for IO controller boards.
+ * Main entry point for CAN BUS <-> HA gate.
  */
 
 #![no_std]
@@ -14,14 +14,12 @@ use static_cell::StaticCell;
 
 use embassy_time::{Duration, Timer};
 
-/// Select HW version here.
 use io_ctrl::boards::ctrl_board;
 
-/// Main testable app logic is here.
-use io_ctrl::app::CtrlApp;
+use io_ctrl::app::GateApp;
 
 static BOARD: StaticCell<ctrl_board::Board> = StaticCell::new();
-static APP: StaticCell<CtrlApp> = StaticCell::new();
+static GATE: StaticCell<GateApp> = StaticCell::new();
 
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
@@ -37,8 +35,7 @@ pub async fn main(spawner: Spawner) {
 
     // Start board tasks.
     board.spawn_tasks(&spawner);
-    board.spawn_io_tasks(&spawner);
 
-    let app = APP.init(CtrlApp::new(board).await);
-    app.main(&spawner).await;
+    let gate = GATE.init(GateApp::new(board).await);
+    gate.main(&spawner).await;
 }
