@@ -11,42 +11,42 @@ default = []
 
 # Selects the CAN bus address of the device (see config.rs)
 # Main / gate
-bus-dev-gate = []
+bus-addr-gate = []
 # main 1st floor
-bus-dev-1 = []
+bus-addr-1 = []
 # dining room 1st floor
-bus-dev-2 = []
+bus-addr-2 = []
 # west 2nd floor
-bus-dev-3 = []
+bus-addr-3 = []
 # east 2nd floor
-bus-dev-4 = []
+bus-addr-4 = []
 
 [dependencies]
 # Basic set
 embassy-futures = { version = "0.1.1" }
-embassy-sync = { version = "0.5.0", features = ["defmt"] }
-embassy-time = { version = "0.3", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-sync = { version = "0.6.1", features = ["defmt"] }
+embassy-time = { version = "0.4.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
 embassy-stm32 = { version = "0.1.0", features = ["defmt", "time-driver-any", "unstable-pac", "time", "stm32g431cb"] }
 
 # Required if you want to store generic stuff in structs.
 embedded-hal-async = { version = "1.0.0" }
 embedded-hal = { version = "1.0.0" }
 embedded-io-async = { version = "0.6.1" }
-embassy-embedded-hal = { version = "0.1.0" }
 embedded-can = { version = "0.4.1" }
+embassy-embedded-hal = { version = "0.2.0" }
 
-embassy-executor = { version = "0.6.1", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers", "task-arena-size-8192"] }
+embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "executor-thread", "defmt", "task-arena-size-8192"] }
 
 # Additional
 embassy-usb = { version = "0.3.0", features = ["defmt", "max-interface-count-3"] }
 static_cell = { version = "2.1.0" }
 
-defmt = "0.3.8"
+defmt = "0.3.10"
 # TODO: Migrate to rtt-target
 defmt-rtt = "0.4"
 
-cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = "0.7.3"
+cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7.5"
 panic-probe = { version = "0.3.2", features = ["print-defmt"] }
 futures = { version = "0.3.31", default-features = false, features = ["async-await"] }
 
