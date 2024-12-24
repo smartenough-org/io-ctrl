@@ -8,10 +8,7 @@ use embassy_sync::mutex::Mutex;
 use super::message::Message;
 
 pub struct Interconnect
-//where
-//I: can::Instance
 {
-    // can: RefCell<can::Fdcan<'static, I, fdcan::NormalOperationMode>>,
     can_tx: Mutex<NoopRawMutex, can::CanTx<'static>>,
     can_rx: Mutex<NoopRawMutex, can::CanRx<'static>>,
 }
@@ -39,6 +36,7 @@ impl Interconnect {
         }
     }
 
+    /// Will block until a message is read.
     pub async fn receive(&self) -> Result<MessageRaw, ()> {
         let start = embassy_time::Instant::now();
         let mut can = self.can_rx.lock().await;
@@ -98,7 +96,4 @@ impl Interconnect {
         let raw = msg.to_raw(dst_addr);
         self.transmit_standard(&raw).await;
     }
-
-    /// Run task that receives messages and pushes relevant into queue.
-    pub async fn run(&self) {}
 }

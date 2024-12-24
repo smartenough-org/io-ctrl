@@ -83,7 +83,6 @@ impl Board {
         let peripherals = embassy_stm32::init(config);
 
         common::ensure_boot0_configuration();
-
         Self::assign_peripherals(peripherals)
     }
 
@@ -158,9 +157,13 @@ impl Board {
         }
     }
 
+    /// Spawn main common tasks.
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(task_status(&self.status)));
-        unwrap!(spawner.spawn(task_interconnect(&self.interconnect)));
+    }
+
+    /// Spawn tasks related to IO handling.
+    pub fn spawn_io_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(task_expander_switches(&self.expander_switches)));
         unwrap!(spawner.spawn(io_router::task_io_router(self, self.io_command_q)));
     }
@@ -224,11 +227,6 @@ impl Board {
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_expander_switches(switches: &'static ExpanderSwitches) {
     switches.run().await;
-}
-
-#[embassy_executor::task]
-pub async fn task_interconnect(interconnect: &'static Interconnect) {
-    interconnect.run().await
 }
 
 #[embassy_executor::task]

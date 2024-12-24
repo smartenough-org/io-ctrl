@@ -46,3 +46,4 @@ Building firmware
   appropriate feature during build, eg.:
 
       cargo build --release --bin ctrl --features bus-dev-1
+      cargo build --release --bin gate --features bus-dev-gate

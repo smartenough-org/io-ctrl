@@ -1,9 +1,3 @@
-// UNUSED CURRENTLY.
-
-use super::{
-    intercom::Intercom,
-    status::{Message, Status},
-};
 use defmt::info;
 use embassy_futures::join::join;
 use embassy_futures::select::{select, Either};
@@ -15,7 +9,9 @@ use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
 use embassy_usb::UsbDevice;
-use static_cell::make_static;
+use static_cell::StaticCell;
+
+use super::interconnect::Interconnect;
 
 struct Disconnected;
 
@@ -35,24 +31,21 @@ type MyClass = CdcAcmClass<'static, MyDriver>;
 const MAX_PACKET_SIZE: u16 = 64;
 
 struct UsbProtocol {
-    status: &'static Status,
 }
 
 impl UsbProtocol {
-    fn new(status: &'static Status) -> Self {
-        Self { status }
+    fn new() -> Self {
+        Self {}
     }
 
     /// Connection spawner / manager.
-    async fn connector(&self, class: &mut MyClass, intercom: &impl Intercom) -> ! {
+    async fn connector(&self, class: &mut MyClass, interconnect: &Interconnect) -> ! {
         loop {
             info!("Awaiting connection in the connector");
             class.wait_connection().await;
             info!("Connected");
-            self.status.set_state(Message::Attention, 2).await;
-            let _ = self.forwarder(class, intercom).await;
+            let _ = self.forwarder(class, interconnect).await;
             info!("Disconnected");
-            self.status.set_state(Message::Attention, 1).await;
         }
     }
 
@@ -60,28 +53,26 @@ impl UsbProtocol {
     async fn forwarder(
         &self,
         class: &mut MyClass,
-        intercom: &impl Intercom,
+        interconnect: &Interconnect,
     ) -> Result<(), Disconnected> {
         let mut usb_buf = [0; 64];
-        let mut ic_buf = [0; 64];
         loop {
             let usb_reader = class.read_packet(&mut usb_buf);
-            let ic_reader = intercom.read(&mut ic_buf);
+            let ic_reader = interconnect.receive();
 
             match select(usb_reader, ic_reader).await {
                 Either::First(bytes) => {
                     if let Ok(bytes) = bytes {
-                        defmt::info!("RX USB -> TX intercom {} {:?}", bytes, &usb_buf[0..bytes]);
-                        intercom.write(&usb_buf[0..bytes]).await;
+                        defmt::info!("RX USB -> TX interconnect {} {:?}", bytes, &usb_buf[0..bytes]);
+                        // interconnect.write(&usb_buf[0..bytes]).await;
                     } else {
                         defmt::info!("Not ok!");
                     }
                 }
-                Either::Second(bytes) => {
-                    defmt::info!("RX intercom -> TX USB {} {}", bytes, &ic_buf[..bytes]);
+                Either::Second(msg) => {
+                    defmt::info!("RX interconnect -> TX USB {:?}", msg);
                     /* If == 64, then zero-length packet later could be required. */
-                    assert!(bytes < 64);
-                    class.write_packet(&ic_buf[0..bytes]).await?;
+                    // class.write_packet(&ic_buf[0..bytes]).await?;
                 }
             }
         }
@@ -91,15 +82,21 @@ impl UsbProtocol {
 pub struct UsbSerial {
     usb: MyUsb,
     class: MyClass,
-    status: &'static Status,
 }
 
 bind_interrupts!(struct Irqs {
     USB_LP => usb::InterruptHandler<peripherals::USB>;
 });
 
+
+// USB interface buffers.
+static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
+static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
+static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
+static STATE: StaticCell<State> = StaticCell::new();
+
 impl UsbSerial {
-    pub fn new(status: &'static Status, usb_peripheral: USB, dp: PA12, dm: PA11) -> Self {
+    pub fn new(usb_peripheral: USB, dp: PA12, dm: PA11) -> Self {
         // TODO: Maybe pull dp down for reenumeration on flash?
 
         let driver = Driver::new(usb_peripheral, Irqs, dp, dm);
@@ -120,11 +117,10 @@ impl UsbSerial {
         // Create embassy-usb DeviceBuilder using the driver and config.
         // It needs some buffers for building the descriptors.
         // let device_descriptor = make_static!([0; 256]);
-        let config_descriptor = make_static!([0; 256]);
-        let bos_descriptor = make_static!([0; 256]);
-        let control_buf = make_static!([0; 64]);
-
-        let state = make_static!(State::new());
+        let config_descriptor = CONFIG_DESCRIPTOR.init([0; 256]);
+        let bos_descriptor = BOS_DESCRIPTOR.init([0; 256]);
+        let control_buf = CONTROL_BUF.init([0; 64]);
+        let state = STATE.init(State::new());
 
         let mut builder = Builder::new(
             driver,
@@ -142,13 +138,13 @@ impl UsbSerial {
         // Build the builder.
         let usb = builder.build();
 
-        Self { usb, class, status }
+        Self { usb, class }
     }
 
-    pub async fn run(mut self, intercom: &impl Intercom) {
+    pub async fn run(mut self, interconnect: &Interconnect) {
         let usb = self.usb.run();
-        let protocol = UsbProtocol::new(self.status);
-        let connector_future = protocol.connector(&mut self.class, intercom);
+        let protocol = UsbProtocol::new();
+        let connector_future = protocol.connector(&mut self.class, interconnect);
 
         info!("Started USB");
         join(usb, connector_future).await;
