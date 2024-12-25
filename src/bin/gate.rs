@@ -7,7 +7,7 @@
 // TODO: Temporarily
 #![allow(unused_imports)]
 
-use {defmt_rtt as _, panic_probe as _};
+use panic_probe as _;
 
 use embassy_executor::Spawner;
 use static_cell::StaticCell;
@@ -23,12 +23,13 @@ static GATE: StaticCell<GateApp> = StaticCell::new();
 
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
-    defmt::info!("Preinit");
+    rtt_target::rtt_init_defmt!();
+    defmt::info!("Gate preinit");
 
     // Create board peripherals (early init)
     let board = BOARD.init(ctrl_board::Board::init());
 
-    defmt::info!("Starting board");
+    defmt::info!("Starting gate board");
 
     // Sleep short time to give peripherals time to initialize.
     Timer::after(Duration::from_millis(50)).await;

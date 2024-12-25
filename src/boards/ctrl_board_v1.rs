@@ -3,12 +3,15 @@
 /// initialized once and available through the lifetime of a program.
 ///
 use crate::boards::{common, io_router};
-use crate::components::status::Status;
 use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_stm32::rtc::{DateTime, Rtc, RtcConfig, RtcError};
 
-use crate::components::interconnect::Interconnect;
+use crate::components::{
+    usb_connect,
+    status::Status,
+    interconnect::Interconnect
+};
 
 use defmt::info;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
