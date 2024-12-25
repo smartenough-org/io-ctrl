@@ -45,10 +45,17 @@ impl GateApp {
         self.spawn_tasks(spawner);
 
         defmt::info!("Starting app on chip {}", uid::uid());
+        let mut cnt = 0;
         loop {
-            // Steady blinking to indicate we are alive and ok.
-            defmt::info!("Tick: {:?}", status::COUNTERS);
-            Timer::after(Duration::from_millis(5000)).await;
+            // Steady action to indicate we are alive and ok.
+            Timer::after(Duration::from_millis(1)).await;
+            if cnt % 1000 == 0 {
+                defmt::info!("Tick: {:?}", status::COUNTERS);
+            }
+            cnt += 1;
+
+            // If we sleep too much and probe doesn't work ok, we can reduce sleep using this:
+            // embassy_futures::yield_now().await;
         }
     }
 }

@@ -7,7 +7,7 @@
 // TODO: Temporarily
 #![allow(unused_imports)]
 
-use {defmt_rtt as _, panic_probe as _};
+use panic_probe as _;
 
 use embassy_executor::Spawner;
 use static_cell::StaticCell;
@@ -25,6 +25,7 @@ static APP: StaticCell<CtrlApp> = StaticCell::new();
 
 #[embassy_executor::main]
 pub async fn main(spawner: Spawner) {
+    rtt_target::rtt_init_defmt!();
     defmt::info!("Preinit");
 
     // Create board peripherals (early init)
