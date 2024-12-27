@@ -70,7 +70,8 @@ pub async fn task_read_interconnect(board: &'static Board) {
             let mut buf = usb_connect::CommPacket::default();
             (buf.data[0], buf.data[1]) = msg.addr_type();
             buf.data[2] = msg.length();
-            buf.data[3..].copy_from_slice(msg.data_as_array());
+            buf.data[3..3 + msg.length() as usize].copy_from_slice(msg.data_as_array());
+            buf.count = 3 + msg.length();
             if board.usb_up.try_send(buf).is_err() {
                 defmt::error!(
                     "Error while sending message to USB. Overflow? qlen={}",

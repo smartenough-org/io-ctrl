@@ -53,7 +53,7 @@ impl Interconnect {
 
                 let delta = (ts - start).as_millis();
                 info!(
-                    "Rx: addr={:#02x} len={} {:02x} --- {}ms",
+                    "Interconnect RX: addr={:#02x} len={} {:02x} --- {}ms",
                     addr,
                     header.len(),
                     rx_frame.data()[0..rx_frame.header().len() as usize],
