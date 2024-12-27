@@ -19,9 +19,7 @@ pub struct GateApp {
 
 impl GateApp {
     pub async fn new(board: &'static Board) -> Self {
-        Self {
-            board,
-        }
+        Self { board }
     }
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
@@ -41,7 +39,6 @@ impl GateApp {
             .transmit_response(&welcome_message)
             .await;
 
-        // This might fail within tasks on i²c/CAN communication with expanders.
         self.spawn_tasks(spawner);
 
         defmt::info!("Starting app on chip {}", uid::uid());

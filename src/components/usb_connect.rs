@@ -5,6 +5,8 @@ use embassy_stm32::peripherals::USB;
 use embassy_stm32::peripherals::{PA11, PA12};
 use embassy_stm32::usb::Driver;
 use embassy_stm32::{bind_interrupts, peripherals, usb};
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::channel::Channel;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
@@ -30,8 +32,9 @@ type MyClass = CdcAcmClass<'static, MyDriver>;
 
 const MAX_PACKET_SIZE: u16 = 64;
 
-struct UsbProtocol {
-}
+pub type CommChannel = Channel<ThreadModeRawMutex, [u8; MAX_PACKET_SIZE as usize], 1>;
+
+struct UsbProtocol {}
 
 impl UsbProtocol {
     fn new() -> Self {
@@ -63,7 +66,11 @@ impl UsbProtocol {
             match select(usb_reader, ic_reader).await {
                 Either::First(bytes) => {
                     if let Ok(bytes) = bytes {
-                        defmt::info!("RX USB -> TX interconnect {} {:?}", bytes, &usb_buf[0..bytes]);
+                        defmt::info!(
+                            "RX USB -> TX interconnect {} {:?}",
+                            bytes,
+                            &usb_buf[0..bytes]
+                        );
                         // interconnect.write(&usb_buf[0..bytes]).await;
                     } else {
                         defmt::info!("Not ok!");
@@ -79,7 +86,7 @@ impl UsbProtocol {
     }
 }
 
-pub struct UsbSerial {
+pub struct UsbConnect {
     usb: MyUsb,
     class: MyClass,
 }
@@ -88,23 +95,23 @@ bind_interrupts!(struct Irqs {
     USB_LP => usb::InterruptHandler<peripherals::USB>;
 });
 
-
 // USB interface buffers.
 static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
 static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
 static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
 static STATE: StaticCell<State> = StaticCell::new();
 
-impl UsbSerial {
+impl UsbConnect {
     pub fn new(usb_peripheral: USB, dp: PA12, dm: PA11) -> Self {
         // TODO: Maybe pull dp down for reenumeration on flash?
 
+        // TODO: Do vbus detection configuration.
         let driver = Driver::new(usb_peripheral, Irqs, dp, dm);
 
         // Create embassy-usb Config
         let mut config = embassy_usb::Config::new(0xd10d, 0x10de);
         config.manufacturer = Some("bla");
-        config.product = Some("Desk Controller");
+        config.product = Some("SmartEnough Gate");
         config.serial_number = Some("0000001");
 
         // Required for windows compatibility.
