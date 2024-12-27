@@ -221,6 +221,17 @@ pub struct MessageRaw {
 }
 
 impl MessageRaw {
+    pub fn from_bytes(addr: u8, msg_type: u8, data: &[u8]) -> Self {
+        let mut raw = Self {
+            addr,
+            msg_type,
+            length: data.len() as u8,
+            data: [0; 8],
+        };
+        raw.data[0..data.len()].copy_from_slice(data);
+        raw
+    }
+
     /// Reconstruct from received data.
     pub fn from_can(can_addr: u16, data: &[u8]) -> Self {
         let (msg_type, addr) = Self::split_can_addr(can_addr);
@@ -244,6 +255,10 @@ impl MessageRaw {
         let device_addr: u8 = (can_addr & 0x3F).try_into().unwrap();
         let msg_type: u8 = ((can_addr >> 6) & 0x1F).try_into().unwrap();
         (msg_type, device_addr)
+    }
+
+    pub fn addr_type(&self) -> (u8, u8) {
+        (self.addr, self.msg_type)
     }
 
     pub fn length(&self) -> u8 {

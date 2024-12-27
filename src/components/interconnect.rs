@@ -68,7 +68,7 @@ impl Interconnect {
         }
     }
 
-    async fn transmit_standard(&self, raw: &MessageRaw) {
+    pub async fn transmit_standard(&self, raw: &MessageRaw) {
         let mut can = self.can_tx.lock().await;
         // RTR False
         let standard_id =

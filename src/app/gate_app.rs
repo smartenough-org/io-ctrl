@@ -1,12 +1,13 @@
 use defmt::unwrap;
 use embassy_executor::Spawner;
-use embassy_stm32::rtc::{DateTime, DayOfWeek};
 use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
-use crate::components::message::{args, Message};
-use crate::components::status;
+use crate::components::{
+    message::{args, Message, MessageRaw},
+    status, usb_connect,
+};
 
 /// High-level command queue that are produced by executor.
 // static EVENT_CHANNEL: EventChannel = EventChannel::new();
@@ -24,6 +25,7 @@ impl GateApp {
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(task_read_interconnect(&self.board)));
+        unwrap!(spawner.spawn(task_read_usb(&self.board)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
@@ -45,8 +47,8 @@ impl GateApp {
         let mut cnt = 0;
         loop {
             // Steady action to indicate we are alive and ok.
-            Timer::after(Duration::from_millis(1)).await;
-            if cnt % 1000 == 0 {
+            Timer::after(Duration::from_millis(2)).await;
+            if cnt % 3000 == 0 {
                 defmt::info!("Tick: {:?}", status::COUNTERS);
             }
             cnt += 1;
@@ -57,99 +59,46 @@ impl GateApp {
     }
 }
 
-#[embassy_executor::task(pool_size = 1)]
+/// Read interconnect and pump into USB.
+#[embassy_executor::task]
 pub async fn task_read_interconnect(board: &'static Board) {
     loop {
         let raw = board.interconnect.receive().await;
-        defmt::info!("Received raw message {}", raw);
+        defmt::info!("Interconnect: Received message {}. Pushing to USB.", raw);
 
-        let message = if let Ok(raw) = raw {
-            let maybe = Message::from_raw(raw);
-            if let Ok(message) = maybe {
-                message
-            } else {
-                continue;
+        if let Ok(msg) = raw {
+            let mut buf = usb_connect::CommPacket::default();
+            (buf.data[0], buf.data[1]) = msg.addr_type();
+            buf.data[2] = msg.length();
+            buf.data[3..].copy_from_slice(msg.data_as_array());
+            if board.usb_up.try_send(buf).is_err() {
+                defmt::error!(
+                    "Error while sending message to USB. Overflow? qlen={}",
+                    board.usb_up.len()
+                );
             }
         } else {
             defmt::warn!("Error while reading a message {:?}", raw);
             continue;
         };
+    }
+}
 
-        match message {
-            Message::CallProcedure { proc_id } => {
-                defmt::warn!("TODO: Call procedure {}", proc_id);
-            }
+/// Read interconnect and pump into USB.
+#[embassy_executor::task]
+pub async fn task_read_usb(board: &'static Board) {
+    loop {
+        let raw = board.usb_down.receive().await;
+        defmt::info!("USB: Received message {}", raw);
 
-            Message::TriggerInput { input, trigger } => {
-                defmt::warn!("TODO: Trigger input {} as {:?}", input, trigger);
-            }
-
-            Message::SetOutput { output, state } => {
-                defmt::warn!("TODO: Trigger output {} to {:?}", output, state);
-            }
-
-            Message::TimeAnnouncement {
-                year,
-                month,
-                day,
-                hour,
-                minute,
-                second,
-                day_of_week,
-            } => {
-                let dow = match day_of_week {
-                    0 => DayOfWeek::Monday,
-                    1 => DayOfWeek::Tuesday,
-                    2 => DayOfWeek::Wednesday,
-                    3 => DayOfWeek::Thursday,
-                    4 => DayOfWeek::Friday,
-                    5 => DayOfWeek::Saturday,
-                    6 => DayOfWeek::Sunday,
-                    _ => {
-                        defmt::warn!(
-                            "Invalid date of week specified in time announcement {}",
-                            day_of_week
-                        );
-                        continue;
-                    }
-                };
-                let dt = DateTime::from(year, month, day, dow, hour, minute, second);
-
-                match dt {
-                    Ok(dt) => {
-                        if board.set_time(dt).await.is_err() {
-                            defmt::error!("RTC returned an error - unable to set time");
-                        } else {
-                            defmt::info!("Time was set.");
-                        }
-                    }
-                    Err(_err) => {
-                        defmt::error!(
-                            "Unable to decode time from {}-{}-{} {} {}:{}:{}.",
-                            year,
-                            month,
-                            day,
-                            day_of_week,
-                            hour,
-                            minute,
-                            second
-                        );
-                    }
-                }
-            }
-
-            Message::RequestStatus => {
-                defmt::info!("TODO: Send our status");
-            }
-
-            // Those are not required on endpoints.
-            Message::Error { .. }
-            | Message::Info { .. }
-            | Message::OutputChanged { .. }
-            | Message::InputTriggered { .. }
-            | Message::Status { .. } => {
-                defmt::info!("Got unhandled message, ignoring: {:?}", message);
-            }
+        let length = raw.data[2] as usize;
+        if length > 8 {
+            defmt::error!("Received message is too big ({}), ignoring.", length);
+            continue;
         }
+        let body = &raw.data[3..3 + length];
+        let raw = MessageRaw::from_bytes(raw.data[0], raw.data[1], body);
+
+        board.interconnect.transmit_standard(&raw).await;
     }
 }

@@ -13,8 +13,6 @@ use embassy_usb::Builder;
 use embassy_usb::UsbDevice;
 use static_cell::StaticCell;
 
-use super::interconnect::Interconnect;
-
 struct Disconnected;
 
 impl From<EndpointError> for Disconnected {
@@ -30,56 +28,98 @@ type MyDriver = Driver<'static, USB>;
 type MyUsb = UsbDevice<'static, MyDriver>;
 type MyClass = CdcAcmClass<'static, MyDriver>;
 
-const MAX_PACKET_SIZE: u16 = 64;
+pub const MAX_PACKET_SIZE: usize = 64;
 
-pub type CommChannel = Channel<ThreadModeRawMutex, [u8; MAX_PACKET_SIZE as usize], 1>;
+#[derive(defmt::Format)]
+pub struct CommPacket {
+    /// Number of valid data in packet.
+    pub count: u8,
+    /// Data from packet.
+    pub data: [u8; MAX_PACKET_SIZE],
+}
 
-struct UsbProtocol {}
+impl Default for CommPacket {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            data: [0; MAX_PACKET_SIZE],
+        }
+    }
+}
 
-impl UsbProtocol {
-    fn new() -> Self {
-        Self {}
+impl CommPacket {
+    pub fn from_slice(data: &[u8]) -> Self {
+        assert!(data.len() < 60);
+        let mut p = Self {
+            count: data.len() as u8,
+            data: [0; MAX_PACKET_SIZE],
+        };
+        for i in 0..data.len() {
+            p.data[i] = data[i];
+        }
+        p
+    }
+}
+
+pub type CommChannel = Channel<ThreadModeRawMutex, CommPacket, 1>;
+
+struct CommProtocol {
+    pub usb_up: &'static CommChannel,
+    pub usb_down: &'static CommChannel,
+}
+
+impl CommProtocol {
+    fn new(usb_up: &'static CommChannel, usb_down: &'static CommChannel) -> Self {
+        Self { usb_up, usb_down }
     }
 
     /// Connection spawner / manager.
-    async fn connector(&self, class: &mut MyClass, interconnect: &Interconnect) -> ! {
+    async fn connector(&self, class: &mut MyClass) -> ! {
         loop {
-            info!("Awaiting connection in the connector");
+            info!("USB: Awaiting connection.");
             class.wait_connection().await;
-            info!("Connected");
-            let _ = self.forwarder(class, interconnect).await;
-            info!("Disconnected");
+            info!("USB: Connected");
+            let _ = self.forwarder(class).await;
+            info!("USB: Disconnected");
         }
     }
 
     /// Connection handler
-    async fn forwarder(
-        &self,
-        class: &mut MyClass,
-        interconnect: &Interconnect,
-    ) -> Result<(), Disconnected> {
+    async fn forwarder(&self, class: &mut MyClass) -> Result<(), Disconnected> {
         let mut usb_buf = [0; 64];
         loop {
             let usb_reader = class.read_packet(&mut usb_buf);
-            let ic_reader = interconnect.receive();
+            let ic_reader = self.usb_up.receive();
 
             match select(usb_reader, ic_reader).await {
                 Either::First(bytes) => {
-                    if let Ok(bytes) = bytes {
-                        defmt::info!(
-                            "RX USB -> TX interconnect {} {:?}",
-                            bytes,
-                            &usb_buf[0..bytes]
-                        );
-                        // interconnect.write(&usb_buf[0..bytes]).await;
-                    } else {
-                        defmt::info!("Not ok!");
+                    match bytes {
+                        Ok(bytes) => {
+                            defmt::info!("USB RX: {} {:?}", bytes, &usb_buf[0..bytes]);
+                            // interconnect.write(&usb_buf[0..bytes]).await;
+                            let msg = CommPacket::from_slice(&usb_buf[0..bytes]);
+                            if self.usb_down.try_send(msg).is_err() {
+                                defmt::warn!("Unable to send received text upstream - is anyone listening? q_len={}", self.usb_down.len());
+                            }
+                        }
+                        Err(err) => {
+                            defmt::info!("Not ok! {:?}", err);
+                            // Disconnected? Or BufferOverflown
+                            return Err(Disconnected);
+                        }
                     }
                 }
                 Either::Second(msg) => {
-                    defmt::info!("RX interconnect -> TX USB {:?}", msg);
+                    defmt::info!("USB TX: {:?}", msg);
                     /* If == 64, then zero-length packet later could be required. */
                     // class.write_packet(&ic_buf[0..bytes]).await?;
+                    let mut buf: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
+                    buf[0] = 0x21; // !
+                    buf[1] = 0x7C; // |
+                    buf[2] = msg.count;
+                    buf[3..].copy_from_slice(&msg.data[0..msg.count as usize]);
+
+                    class.write_packet(&buf).await?;
                 }
             }
         }
@@ -140,7 +180,7 @@ impl UsbConnect {
         );
 
         // Create classes on the builder.
-        let class = CdcAcmClass::new(&mut builder, state, MAX_PACKET_SIZE);
+        let class = CdcAcmClass::new(&mut builder, state, MAX_PACKET_SIZE as u16);
 
         // Build the builder.
         let usb = builder.build();
@@ -148,10 +188,10 @@ impl UsbConnect {
         Self { usb, class }
     }
 
-    pub async fn run(mut self, interconnect: &Interconnect) {
+    pub async fn run(&mut self, usb_up: &'static CommChannel, usb_down: &'static CommChannel) {
         let usb = self.usb.run();
-        let protocol = UsbProtocol::new();
-        let connector_future = protocol.connector(&mut self.class, interconnect);
+        let protocol = CommProtocol::new(usb_up, usb_down);
+        let connector_future = protocol.connector(&mut self.class);
 
         info!("Started USB");
         join(usb, connector_future).await;
