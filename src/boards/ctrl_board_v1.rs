@@ -52,6 +52,10 @@ static INPUT_CHANNEL: InputChannel = InputChannel::new();
 /// Queue of output-controlling events that are handled by IORouter.
 static OUTPUT_CHANNEL: io_router::OutputChannel = io_router::OutputChannel::new();
 
+/// Usb bidirectional comms
+static USB_UP: usb_connect::CommChannel = usb_connect::CommChannel::new();
+static USB_DOWN: usb_connect::CommChannel = usb_connect::CommChannel::new();
+
 /// Represents our µC hardware interface. It's 'static and shared by most code.
 pub struct Board {
     // FIXME: ? UnsafeCell? For led maybe ok.
@@ -71,6 +75,11 @@ pub struct Board {
 
     /// CAN communication between the layers.
     pub interconnect: Interconnect,
+
+    /// Usb group, used by gate.
+    pub usb_connect: Mutex<NoopRawMutex, usb_connect::UsbConnect>,
+    pub usb_up: &'static usb_connect::CommChannel,
+    pub usb_down: &'static usb_connect::CommChannel,
 
     /// On board RTC.
     pub rtc: Mutex<NoopRawMutex, Rtc>,
@@ -143,13 +152,17 @@ impl Board {
 
         let rtc = Rtc::new(p.RTC, RtcConfig::default());
 
+        let usb_connect = usb_connect::UsbConnect::new(p.USB, p.PA12, p.PA11);
+
         info!("Board initialized");
         Self {
-            // led: UnsafeCell::new(
             expander_switches,
             indexed_outputs,
             interconnect,
             status,
+            usb_connect: Mutex::new(usb_connect),
+            usb_up: &USB_UP,
+            usb_down: &USB_DOWN,
             rtc: Mutex::new(rtc),
             input_q: &INPUT_CHANNEL,
             io_command_q: &OUTPUT_CHANNEL,
@@ -159,6 +172,7 @@ impl Board {
     /// Spawn main common tasks.
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
         unwrap!(spawner.spawn(task_status(&self.status)));
+        unwrap!(spawner.spawn(task_usb_transceiver(&self)));
     }
 
     /// Spawn tasks related to IO handling.
@@ -223,7 +237,7 @@ impl Board {
     }
 }
 
-#[embassy_executor::task(pool_size = 1)]
+#[embassy_executor::task]
 pub async fn task_expander_switches(switches: &'static ExpanderSwitches) {
     switches.run().await;
 }
@@ -231,4 +245,10 @@ pub async fn task_expander_switches(switches: &'static ExpanderSwitches) {
 #[embassy_executor::task]
 pub async fn task_status(status: &'static Status) {
     status.update_loop().await
+}
+
+#[embassy_executor::task]
+pub async fn task_usb_transceiver(board: &'static Board) {
+    let mut usb_connect = board.usb_connect.lock().await;
+    usb_connect.run(board.usb_up, board.usb_down).await
 }
