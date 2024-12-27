@@ -63,6 +63,8 @@ impl CommPacket {
 
 pub type CommChannel = Channel<ThreadModeRawMutex, CommPacket, 1>;
 
+/// We use Serial interface for simplicity, but send PACKETS of data.
+/// Those need 2 bytes for synchronization, length and data.
 struct CommProtocol {
     pub usb_up: &'static CommChannel,
     pub usb_down: &'static CommChannel,
@@ -96,7 +98,7 @@ impl CommProtocol {
                     match bytes {
                         Ok(bytes) => {
                             defmt::info!("USB RX: {} {:?}", bytes, &usb_buf[0..bytes]);
-                            // interconnect.write(&usb_buf[0..bytes]).await;
+                            // TODO: Check synchronization bytes!
                             let msg = CommPacket::from_slice(&usb_buf[0..bytes]);
                             if self.usb_down.try_send(msg).is_err() {
                                 defmt::warn!("Unable to send received text upstream - is anyone listening? q_len={}", self.usb_down.len());
@@ -117,9 +119,11 @@ impl CommProtocol {
                     buf[0] = 0x21; // !
                     buf[1] = 0x7C; // |
                     buf[2] = msg.count;
-                    buf[3..].copy_from_slice(&msg.data[0..msg.count as usize]);
+                    buf[3..3 + msg.count as usize].copy_from_slice(&msg.data[0..msg.count as usize]);
+                    let buf = &buf[0..3 + msg.count as usize];
 
-                    class.write_packet(&buf).await?;
+                    defmt::info!("USB TX RAW: {:#x}", buf);
+                    class.write_packet(buf).await?;
                 }
             }
         }
