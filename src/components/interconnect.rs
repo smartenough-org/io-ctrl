@@ -7,8 +7,7 @@ use embassy_sync::mutex::Mutex;
 
 use super::message::Message;
 
-pub struct Interconnect
-{
+pub struct Interconnect {
     can_tx: Mutex<NoopRawMutex, can::CanTx<'static>>,
     can_rx: Mutex<NoopRawMutex, can::CanRx<'static>>,
 }

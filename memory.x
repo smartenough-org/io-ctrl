@@ -2,7 +2,12 @@ MEMORY
 {
   /* NOTE 1 K = 1 KiBi = 1024 bytes */
   FLASH : ORIGIN = 0x08000000, LENGTH = 128K
-  /* 16kB + 6kB + 10kB */
+  /*
+  Category 2 device: 16kB + 6kB + 10kB
+  16kB at 0x2000_0000
+   6kB at 0x2000_4000
+  10kB at 0x1000_0000 CCM RAM + Aliased at end of SRAM2
+  */
   RAM : ORIGIN = 0x20000000, LENGTH = 32K
 }
 
