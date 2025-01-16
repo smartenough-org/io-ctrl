@@ -4,12 +4,12 @@
 // pub const MAX_ACTIONS: usize = 32;
 
 #[cfg(feature = "bus-addr-gate")]
-pub const LOCAL_ADDRESS: u8 = 1;
+pub const LOCAL_ADDRESS: u8 = 0;
 #[cfg(feature = "bus-addr-1")]
 pub const LOCAL_ADDRESS: u8 = 1;
 #[cfg(feature = "bus-addr-2")]
-pub const LOCAL_ADDRESS: u8 = 1;
+pub const LOCAL_ADDRESS: u8 = 2;
 #[cfg(feature = "bus-addr-3")]
-pub const LOCAL_ADDRESS: u8 = 1;
+pub const LOCAL_ADDRESS: u8 = 3;
 #[cfg(feature = "bus-addr-4")]
-pub const LOCAL_ADDRESS: u8 = 1;
+pub const LOCAL_ADDRESS: u8 = 4;

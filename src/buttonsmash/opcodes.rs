@@ -12,13 +12,14 @@ pub enum Opcode {
     /// Call a procedure
     Call(u8),
 
+    /*
     /// Call first procedure if register is true, otherwise call second one.
     /// Can be used to implement grouping of lights that works independently
     /// from the current IO state. Eg. shortclick on a button causes a group
     /// of lights to toggle, even if some of them changed state in the meantime.
     /// FIXME: This can be implemented with CallRegister
-    // CallToggle(u8, ProcIdx, ProcIdx),
-
+    CallToggle(u8, ProcIdx, ProcIdx),
+    */
     /// Call a procedure which ID is stored in given register. This allows a
     /// single button to iterate between multiple actions. Each action stores
     /// ID of the next procedure to be called.

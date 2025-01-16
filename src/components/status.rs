@@ -23,6 +23,12 @@ impl Counter {
     }
 }
 
+impl Default for Counter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl defmt::Format for Counter {
     fn format(&self, fmt: defmt::Formatter) {
         let data = self.0.load(Ordering::Relaxed);

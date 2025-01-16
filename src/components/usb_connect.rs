@@ -13,6 +13,8 @@ use embassy_usb::Builder;
 use embassy_usb::UsbDevice;
 use static_cell::StaticCell;
 
+use super::message::MessageRaw;
+
 struct Disconnected;
 
 impl From<EndpointError> for Disconnected {
@@ -28,8 +30,14 @@ type MyDriver = Driver<'static, USB>;
 type MyUsb = UsbDevice<'static, MyDriver>;
 type MyClass = CdcAcmClass<'static, MyDriver>;
 
+/// Number of bytes transmitted over USB at once. Max size of CommPacket
 pub const MAX_PACKET_SIZE: usize = 64;
 
+// addr, type, length, 8 bytes
+const CAN_MESSAGE_SIZE: usize = 8 + 3;
+pub const CAN_PACKET_SIZE: usize = 2 + CAN_MESSAGE_SIZE;
+
+/// Describes generic message serialized for transfer over USB.
 #[derive(defmt::Format)]
 pub struct CommPacket {
     /// Number of valid data in packet.
@@ -48,20 +56,81 @@ impl Default for CommPacket {
 }
 
 impl CommPacket {
+    /// Byte use to start a packet. Always the same.
+    const SYNC_BYTE_1: u8 = 0x21; // !
+    /// Second synchronization byte that determines a packet type as well.
+    /// 2_CAN uses static 8 byte packet length.
+    const SYNC_BYTE_2_CAN: u8 = 0x7C; // |
+    const _SYNC_BYTE_2_FDCAN: u8 = 0x7D; // }
+
     pub fn from_slice(data: &[u8]) -> Self {
         assert!(data.len() < 60);
         let mut p = Self {
             count: data.len() as u8,
             data: [0; MAX_PACKET_SIZE],
         };
-        for i in 0..data.len() {
-            p.data[i] = data[i];
-        }
+        p.data[..data.len()].copy_from_slice(&data[..]);
         p
+    }
+
+    /// Serialize raw message into CommPacket
+    pub fn from_raw_message(raw: &MessageRaw) -> Self {
+        let mut buf = Self::default();
+        buf.count = 1 + 1 + 1 + 8;
+        (buf.data[0], buf.data[1]) = raw.addr_type();
+        buf.data[2] = raw.length();
+        buf.data[3..3 + raw.length() as usize].copy_from_slice(raw.data_as_slice());
+        buf
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.data[0..self.count as usize]
+    }
+
+    /// Deserialize from a stream.
+    pub fn deserialize_from(buf: &[u8]) -> Option<Self> {
+        if buf.len() < 3 {
+            defmt::warn!("Unable to decode - message to short {:?}", buf);
+            return None;
+        }
+
+        if buf[0] != Self::SYNC_BYTE_1 {
+            defmt::warn!(
+                "Unable to decode message - synchronization failed {:?}",
+                buf
+            );
+            return None;
+        }
+
+        let length: usize = match buf[1] {
+            Self::SYNC_BYTE_2_CAN => CAN_MESSAGE_SIZE,
+            Self::_SYNC_BYTE_2_FDCAN => {
+                defmt::warn!("Ignoring unhandled FDCAN on USB");
+                return None;
+            }
+            _ => {
+                defmt::warn!("Invalid synchronization - skip message {:?}", buf);
+                return None;
+            }
+        };
+        if buf.len() - 2 < length {
+            defmt::warn!("Unable to decode message - too short {:?}", buf);
+            return None;
+        }
+        Some(Self::from_slice(&buf[2..2 + length]))
+    }
+
+    /// Serialize onto a byte stream.
+    pub fn serialize_as_can<'a>(&self, buf: &'a mut [u8]) -> &'a [u8] {
+        // Message size at this level is constant to keep things simple.
+        buf[0] = Self::SYNC_BYTE_1;
+        buf[1] = Self::SYNC_BYTE_2_CAN;
+        buf[2..CAN_PACKET_SIZE].copy_from_slice(&self.data[0..CAN_MESSAGE_SIZE]);
+        &buf[0..CAN_PACKET_SIZE]
     }
 }
 
-pub type CommChannel = Channel<ThreadModeRawMutex, CommPacket, 1>;
+pub type CommChannel = Channel<ThreadModeRawMutex, CommPacket, 2>;
 
 /// We use Serial interface for simplicity, but send PACKETS of data.
 /// Those need 2 bytes for synchronization, length and data.
@@ -88,8 +157,8 @@ impl CommProtocol {
 
     /// Connection handler
     async fn forwarder(&self, class: &mut MyClass) -> Result<(), Disconnected> {
-        let mut usb_buf = [0; 64];
         loop {
+            let mut usb_buf = [0; 64];
             let usb_reader = class.read_packet(&mut usb_buf);
             let ic_reader = self.usb_up.receive();
 
@@ -98,10 +167,12 @@ impl CommProtocol {
                     match bytes {
                         Ok(bytes) => {
                             defmt::info!("USB RX: {} {:?}", bytes, &usb_buf[0..bytes]);
-                            // TODO: Check synchronization bytes!
-                            let msg = CommPacket::from_slice(&usb_buf[0..bytes]);
-                            if self.usb_down.try_send(msg).is_err() {
-                                defmt::warn!("Unable to send received text upstream - is anyone listening? q_len={}", self.usb_down.len());
+                            if let Some(msg) = CommPacket::deserialize_from(&usb_buf[0..bytes]) {
+                                if self.usb_down.len() >= 1 {
+                                    defmt::warn!("Non-empty queue (len={}) when sending msg from USB.", self.usb_down.len());
+                                }
+                                self.usb_down.send(msg).await;
+                                continue;
                             }
                         }
                         Err(err) => {
@@ -112,15 +183,11 @@ impl CommProtocol {
                     }
                 }
                 Either::Second(msg) => {
-                    defmt::info!("USB TX: {:?}", msg);
+                    defmt::info!("USB TX: {:?}", msg.as_slice());
                     /* If == 64, then zero-length packet later could be required. */
                     // class.write_packet(&ic_buf[0..bytes]).await?;
-                    let mut buf: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
-                    buf[0] = 0x21; // !
-                    buf[1] = 0x7C; // |
-                    buf[2] = msg.count;
-                    buf[3..3 + msg.count as usize].copy_from_slice(&msg.data[0..msg.count as usize]);
-                    let buf = &buf[0..3 + msg.count as usize];
+                    let mut buf: [u8; CAN_PACKET_SIZE] = [0; CAN_PACKET_SIZE];
+                    let buf = msg.serialize_as_can(&mut buf);
 
                     defmt::info!("USB TX RAW: {:#x}", buf);
                     class.write_packet(buf).await?;
@@ -176,7 +243,6 @@ impl UsbConnect {
         let mut builder = Builder::new(
             driver,
             config,
-            // device_descriptor,
             config_descriptor,
             bos_descriptor,
             &mut [], /* msos descriptors */

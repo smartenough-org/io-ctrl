@@ -241,7 +241,7 @@ impl MessageRaw {
             length: data.len() as u8,
             data: [0; 8],
         };
-        raw.data.copy_from_slice(data);
+        raw.data[0..data.len()].copy_from_slice(data);
         raw
     }
 
@@ -265,13 +265,13 @@ impl MessageRaw {
         self.length
     }
 
-    pub fn data_as_array(&self) -> &[u8] {
+    pub fn data_as_slice(&self) -> &[u8] {
         &self.data[0..self.length as usize]
     }
 }
 
 impl Message {
-    pub fn from_raw(raw: MessageRaw) -> Result<Self, ()> {
+    pub fn from_raw(raw: &MessageRaw) -> Result<Self, ()> {
         match raw.msg_type {
             msg_type::SET_OUTPUT => {
                 if raw.length != 2 {
@@ -325,26 +325,28 @@ impl Message {
 
             msg_type::INFO | msg_type::ERROR | msg_type::STATUS => {
                 defmt::info!("Ignoring info/error/status message: {:?}", raw);
-                return Err(());
+                Err(())
             }
 
             msg_type::OUTPUT_CHANGED | msg_type::INPUT_TRIGGERED => {
                 defmt::info!("Ignoring output/input change message {:?}", raw);
-                return Err(());
+                Err(())
             }
 
             _ => {
                 // TBH, probably safe to ignore.
                 defmt::warn!("Unable to parse unhandled message type {:?}", raw);
-                return Err(());
+                Err(())
             }
         }
     }
 
     /// Convert message to 11 bit address and up to 8 bytes of data to be sent via CAN.
     pub fn to_raw(&self, addr: u8) -> MessageRaw {
-        let mut raw = MessageRaw::default();
-        raw.addr = addr;
+        let mut raw = MessageRaw {
+            addr,
+            ..MessageRaw::default()
+        };
 
         match self {
             Message::Error { code } => {
@@ -357,6 +359,12 @@ impl Message {
                 raw.length = 6;
                 raw.data[0..2].copy_from_slice(&code.to_le_bytes());
                 raw.data[2..6].copy_from_slice(&arg.to_le_bytes());
+            }
+            Message::SetOutput { output, state } => {
+                raw.msg_type = msg_type::SET_OUTPUT;
+                raw.length = 2;
+                raw.data[0] = *output;
+                raw.data[1] = state.to_bytes();
             }
             Message::OutputChanged { output, state } => {
                 raw.msg_type = msg_type::OUTPUT_CHANGED;

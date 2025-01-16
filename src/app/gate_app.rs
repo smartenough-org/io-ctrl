@@ -9,9 +9,6 @@ use crate::components::{
     status, usb_connect,
 };
 
-/// High-level command queue that are produced by executor.
-// static EVENT_CHANNEL: EventChannel = EventChannel::new();
-
 /// Main application/business logic entrypoint.
 pub struct GateApp {
     /// For all IO needs (and comm peripherals like CAN and USB)
@@ -24,8 +21,8 @@ impl GateApp {
     }
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
-        unwrap!(spawner.spawn(task_read_interconnect(&self.board)));
-        unwrap!(spawner.spawn(task_read_usb(&self.board)));
+        unwrap!(spawner.spawn(task_read_interconnect(self.board)));
+        unwrap!(spawner.spawn(task_read_usb(self.board)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
@@ -43,7 +40,6 @@ impl GateApp {
 
         self.spawn_tasks(spawner);
 
-        defmt::info!("Starting app on chip {}", uid::uid());
         let mut cnt = 0;
         loop {
             // Steady action to indicate we are alive and ok.
@@ -70,14 +66,13 @@ pub async fn task_read_interconnect(board: &'static Board) {
             let mut buf = usb_connect::CommPacket::default();
             (buf.data[0], buf.data[1]) = msg.addr_type();
             buf.data[2] = msg.length();
-            buf.data[3..3 + msg.length() as usize].copy_from_slice(msg.data_as_array());
+            buf.data[3..3 + msg.length() as usize].copy_from_slice(msg.data_as_slice());
             buf.count = 3 + msg.length();
-            if board.usb_up.try_send(buf).is_err() {
-                defmt::error!(
-                    "Error while sending message to USB. Overflow? qlen={}",
-                    board.usb_up.len()
-                );
+
+            if board.usb_up.len() >= 1 {
+                defmt::warn!("Non-empty queue (len={}) when sending to USB.", board.usb_up.len());
             }
+            board.usb_up.send(buf).await;
         } else {
             defmt::warn!("Error while reading a message {:?}", raw);
             continue;
@@ -90,7 +85,7 @@ pub async fn task_read_interconnect(board: &'static Board) {
 pub async fn task_read_usb(board: &'static Board) {
     loop {
         let raw = board.usb_down.receive().await;
-        defmt::info!("USB: Received message {}", raw);
+        defmt::info!("USB RX: Received message {}", raw.as_slice());
 
         let length = raw.data[2] as usize;
         if length > 8 {
@@ -99,6 +94,12 @@ pub async fn task_read_usb(board: &'static Board) {
         }
         let body = &raw.data[3..3 + length];
         let raw = MessageRaw::from_bytes(raw.data[0], raw.data[1], body);
+
+        if let Ok(msg) = Message::from_raw(&raw) {
+            defmt::info!("Parsed message is {:?} -> {:?}.", raw, msg);
+        } else {
+            defmt::info!("Unable to parse message {:?}", raw)
+        }
 
         board.interconnect.transmit_standard(&raw).await;
     }

@@ -12,7 +12,8 @@ pub struct Interconnect {
     can_rx: Mutex<NoopRawMutex, can::CanRx<'static>>,
 }
 
-static USE_LOOPBACK: bool = true;
+// NOTE: Use loopback for single-device tests.
+static USE_LOOPBACK: bool = false;
 
 impl Interconnect {
     pub fn new(mut can: can::CanConfigurator<'static>) -> Self {
@@ -51,15 +52,16 @@ impl Interconnect {
                     embedded_can::Id::Standard(id) => id.as_raw(),
                 };
 
+                let length: usize = rx_frame.header().len().into();
                 let delta = (ts - start).as_millis();
                 info!(
-                    "Interconnect RX: addr={:#02x} len={} {:02x} --- {}ms",
+                    "CAN RX: can_addr={:#02x} len={} {:02x} --- {}ms",
                     addr,
                     header.len(),
-                    rx_frame.data()[0..rx_frame.header().len() as usize],
+                    rx_frame.data()[0..length],
                     delta,
                 );
-                Ok(MessageRaw::from_can(addr, rx_frame.data()))
+                Ok(MessageRaw::from_can(addr, &rx_frame.data()[0..length]))
             }
             Err(_err) => {
                 error!("Error in frame");
@@ -75,9 +77,9 @@ impl Interconnect {
             embedded_can::StandardId::new(raw.to_can_addr()).expect("This should create a message");
         let id = embedded_can::Id::Standard(standard_id);
         let hdr = can::frame::Header::new(id, raw.length(), false);
-        let frame = can::frame::Frame::new(hdr, raw.data_as_array()).unwrap();
+        let frame = can::frame::Frame::new(hdr, raw.data_as_slice()).unwrap();
         info!(
-            "Transmitting {:?} {:#02x} {:?}",
+            "CAN TX: Transmitting {:?} {:#02x} {:?}",
             raw,
             raw.to_can_addr(),
             frame

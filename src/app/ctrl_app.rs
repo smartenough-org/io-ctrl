@@ -14,7 +14,7 @@ use crate::buttonsmash::{Event, EventChannel, Executor, Opcode};
 use crate::io::event_converter::run_event_converter;
 use crate::io::events::Trigger;
 
-/// High-level command queue that are produced by executor.
+/// High-level command queue that are consumed by executor.
 static EVENT_CHANNEL: EventChannel = EventChannel::new();
 
 /// Main application/business logic entrypoint.
@@ -27,7 +27,7 @@ pub struct CtrlApp {
 impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
         // TODO: Pass interconnect? Or a queue?
-        let mut executor = Executor::new(&board.io_command_q, &board.interconnect);
+        let mut executor = Executor::new(board.io_command_q, &board.interconnect);
         Self::configure(&mut executor).await;
 
         Self {
@@ -85,7 +85,7 @@ impl CtrlApp {
         let executor = unsafe { &mut *self.executor.get() };
         unwrap!(spawner.spawn(task_pump_switch_events_to_microvm(executor)));
         unwrap!(spawner.spawn(run_event_converter(self.board.input_q, &EVENT_CHANNEL)));
-        unwrap!(spawner.spawn(task_read_interconnect(&self.board)));
+        unwrap!(spawner.spawn(task_read_interconnect(self.board)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
@@ -104,12 +104,15 @@ impl CtrlApp {
         // This might fail within tasks on i²c/CAN communication with expanders.
         self.spawn_tasks(spawner);
 
-        defmt::info!("Starting app on chip {}", uid::uid());
+        let mut cnt = 0;
         loop {
-            // Steady blinking to indicate we are alive and ok.
-
-            defmt::info!("Tick: {:?}", status::COUNTERS);
-            Timer::after(Duration::from_millis(5000)).await;
+            // Prevent deep sleep to allow easy remote debugging.
+            Timer::after(Duration::from_millis(2)).await;
+            cnt += 1;
+            if cnt % 3000 == 0 {
+                defmt::info!("Tick: {:?}", status::COUNTERS);
+            }
+            // embassy_futures::yield_now().await;
 
             /*
             let ir_reg = pac::FDCAN1.ir().read();
@@ -138,7 +141,7 @@ pub async fn task_read_interconnect(board: &'static Board) {
         defmt::info!("Received raw message {}", raw);
 
         let message = if let Ok(raw) = raw {
-            let maybe = Message::from_raw(raw);
+            let maybe = Message::from_raw(&raw);
             if let Ok(message) = maybe {
                 message
             } else {
@@ -155,11 +158,17 @@ pub async fn task_read_interconnect(board: &'static Board) {
             }
 
             Message::TriggerInput { input, trigger } => {
-                defmt::warn!("TODO: Trigger input {} as {:?}", input, trigger);
+                defmt::warn!("TODO: Emulate input trigger {} as {:?}", input, trigger);
             }
 
             Message::SetOutput { output, state } => {
-                defmt::warn!("TODO: Trigger output {} to {:?}", output, state);
+                let event = match state {
+                    args::OutputState::On => Event::RemoteActivate(output),
+                    args::OutputState::Off => Event::RemoteDeactivate(output),
+                    args::OutputState::Toggle => Event::RemoteToggle(output),
+                };
+                defmt::warn!("Trigger output {} to {:?} -> {:?}", output, state, event);
+                EVENT_CHANNEL.send(event).await;
             }
 
             Message::TimeAnnouncement {
