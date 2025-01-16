@@ -171,8 +171,8 @@ impl Board {
 
     /// Spawn main common tasks.
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
-        unwrap!(spawner.spawn(task_status(&self.status)));
-        unwrap!(spawner.spawn(task_usb_transceiver(&self)));
+        unwrap!(spawner.spawn(task_status(self.status)));
+        unwrap!(spawner.spawn(task_usb_transceiver(self)));
     }
 
     /// Spawn tasks related to IO handling.
@@ -214,7 +214,7 @@ impl Board {
                 let seconds = elapsed - minutes * 60;
                 */
 
-                let dt = DateTime::from(
+                DateTime::from(
                     2025,
                     1,
                     1,
@@ -223,9 +223,7 @@ impl Board {
                     00,
                     00,
                 )
-                .expect("This should work");
-
-                dt
+                .expect("This should work")
             }
         }
     }

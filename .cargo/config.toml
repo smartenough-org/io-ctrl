@@ -2,7 +2,7 @@
 # replace nRF82840_xxAA with your chip as listed in `probe-rs chip list`
 # Can try probe-rs after 0.19 again.
 # runner = "probe-rs run --chip STM32F411CEu"
-runner = "probe-rs run --chip STM32G431CBUx --log-file /dev/null"
+runner = "probe-rs run --chip STM32G431CBUx --always-print-stacktrace --log-file /dev/null"
 
 [build]
 target = "thumbv7em-none-eabi"

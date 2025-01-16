@@ -69,6 +69,8 @@ impl<const BN: usize> Executor<BN> {
     async fn emit(&self, command: IOCommand) {
         defmt::info!("Emiting from executor {:?}", command);
 
+        // TODO: I've mixed feeling about handling this in emit(). Move lower
+        // and create emit_message and emit_io?
         let message = match &command {
             IOCommand::ToggleOutput(out) => Message::OutputChanged {
                 output: *out,
@@ -128,7 +130,19 @@ impl<const BN: usize> Executor<BN> {
             Opcode::Call(proc_id) => {
                 return MicroState::CallProc(proc_id as usize);
             }
-
+            /*
+            Opcode::CallToggle(register, proc_id_true, proc_id_false) => {
+                if self.registers[register] {
+                    // Internal register was true, toggle it and call first procedure.
+                    // Used for grouping.
+                    self.registers[register] = false;
+                    return MicroState::CallProc(proc_id_true as usize);
+                } else {
+                    self.registers[register] = true;
+                    return MicroState::CallProc(proc_id_false as usize);
+                }
+            }
+            */
             Opcode::CallRegister(register) => {
                 return MicroState::CallProc(self.registers[register as usize] as usize);
             }
