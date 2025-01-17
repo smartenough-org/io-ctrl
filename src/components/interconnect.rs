@@ -53,7 +53,13 @@ impl Interconnect {
                 };
 
                 let length: usize = rx_frame.header().len().into();
-                let delta = (ts - start).as_millis();
+                let delta = if ts > start {
+                    // This panics on start > ts
+                    (ts - start).as_millis()
+                } else {
+                    // Message was already buffered when we were called.
+                    0
+                };
                 info!(
                     "CAN RX: can_addr={:#02x} len={} {:02x} --- {}ms",
                     addr,
