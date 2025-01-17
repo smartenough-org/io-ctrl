@@ -29,7 +29,7 @@ pub fn config_stm32g4() -> Config {
 
     /* ??? */
     config.rcc.sys = Sysclk::PLL1_R;
-    config.rcc.boost = true; // BOOST!
+    config.rcc.boost = true;
 
     if USE_HSI48 {
         // Sets up the Clock Recovery System (CRS) to use the USB SOF to trim the HSI48 oscillator.

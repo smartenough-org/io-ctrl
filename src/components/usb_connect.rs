@@ -130,7 +130,7 @@ impl CommPacket {
     }
 }
 
-pub type CommChannel = Channel<ThreadModeRawMutex, CommPacket, 2>;
+pub type CommChannel = Channel<ThreadModeRawMutex, CommPacket, 3>;
 
 /// We use Serial interface for simplicity, but send PACKETS of data.
 /// Those need 2 bytes for synchronization, length and data.
