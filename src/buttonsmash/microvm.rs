@@ -97,7 +97,7 @@ impl<const BN: usize> Executor<BN> {
 
         // Transmit information over CAN.
         // TODO: This should not block and in case of broken CAN communication be ignored.
-        self.interconnect.transmit_response(&message).await;
+        self.interconnect.transmit_response(&message, false).await;
     }
 
     /// Helper: Bind input/trigger to a call to a given procedure.

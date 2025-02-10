@@ -1,3 +1,5 @@
+use embassy_stm32::can;
+
 use crate::buttonsmash::consts::{InIdx, OutIdx, ProcIdx};
 
 /* Generic CAN has 11-bit addresses.
@@ -249,6 +251,14 @@ impl MessageRaw {
         };
         raw.data[0..data.len()].copy_from_slice(data);
         raw
+    }
+
+    pub fn to_can_frame(&self) -> can::frame::Frame {
+        let standard_id = embedded_can::StandardId::new(self.to_can_addr())
+            .expect("This should create a message");
+        let id = embedded_can::Id::Standard(standard_id);
+        let hdr = can::frame::Header::new(id, self.length(), false);
+        can::frame::Frame::new(hdr, self.data_as_slice()).unwrap()
     }
 
     /// Combine parts into 11-bit CAN address.

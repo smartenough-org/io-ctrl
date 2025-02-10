@@ -35,7 +35,7 @@ impl GateApp {
 
         self.board
             .interconnect
-            .transmit_response(&welcome_message)
+            .transmit_response(&welcome_message, true)
             .await;
 
         self.spawn_tasks(spawner);
@@ -104,6 +104,6 @@ pub async fn task_read_usb(board: &'static Board) {
             defmt::info!("Unable to parse message {:?}", raw)
         }
 
-        board.interconnect.transmit_standard(&raw).await;
+        board.interconnect.transmit_standard(&raw, true).await;
     }
 }
