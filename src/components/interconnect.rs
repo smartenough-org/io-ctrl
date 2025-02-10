@@ -1,19 +1,28 @@
 use crate::components::message::MessageRaw;
+use crate::components::status;
 use crate::config::LOCAL_ADDRESS;
 use defmt::*;
-use embassy_stm32::can;
+use embassy_stm32::can::frame::Envelope;
+use embassy_stm32::can::{self, BufferedCanSender};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::channel::DynamicReceiver;
 use embassy_sync::mutex::Mutex;
+use static_cell::StaticCell;
 
 use super::message::Message;
 
 pub struct Interconnect {
-    can_tx: Mutex<NoopRawMutex, can::CanTx<'static>>,
-    can_rx: Mutex<NoopRawMutex, can::CanRx<'static>>,
+    can_tx: Mutex<NoopRawMutex, BufferedCanSender>,
+    can_rx: DynamicReceiver<'static, Result<Envelope, embassy_stm32::can::enums::BusError>>,
 }
 
 // NOTE: Use loopback for single-device tests.
 static USE_LOOPBACK: bool = false;
+
+static TX_BUF: StaticCell<can::TxBuf<4>> = StaticCell::new();
+static RX_BUF: StaticCell<can::RxBuf<4>> = StaticCell::new();
+// I only keep this around so that can keeps working.
+static BUFFERED_CAN: StaticCell<embassy_stm32::can::BufferedCan<'static, 4, 4>> = StaticCell::new();
 
 impl Interconnect {
     pub fn new(mut can: can::CanConfigurator<'static>) -> Self {
@@ -29,18 +38,26 @@ impl Interconnect {
         );
         can.set_bitrate(250_000);
         let can = can.start(mode);
-        let (can_tx, can_rx, _props) = can.split();
+
+        let tx_buf = TX_BUF.init(can::TxBuf::<4>::new());
+        let rx_buf = RX_BUF.init(can::RxBuf::<4>::new());
+
+        let buffered = can.buffered(tx_buf, rx_buf);
+        let writer = buffered.writer();
+        let reader = buffered.reader();
+        BUFFERED_CAN.init(buffered);
+
         Self {
-            can_tx: Mutex::new(can_tx),
-            can_rx: Mutex::new(can_rx),
+            can_tx: Mutex::new(writer),
+            can_rx: reader,
         }
     }
 
     /// Will block until a message is read.
     pub async fn receive(&self) -> Result<MessageRaw, ()> {
         let start = embassy_time::Instant::now();
-        let mut can = self.can_rx.lock().await;
-        match can.read().await {
+        let can = &self.can_rx;
+        match can.receive().await {
             Ok(envelope) => {
                 let (ts, rx_frame) = (envelope.ts, envelope.frame);
                 let header = rx_frame.header();
@@ -61,7 +78,7 @@ impl Interconnect {
                     // Message was already buffered when we were called.
                     0
                 };
-                info!(
+                defmt::trace!(
                     "CAN RX: can_addr={:#02x} len={} {:02x} --- {}ms",
                     addr,
                     header.len(),
@@ -92,37 +109,38 @@ impl Interconnect {
         }
     }
 
-    pub async fn transmit_standard(&self, raw: &MessageRaw) {
-        let mut can = self.can_tx.lock().await;
+    pub async fn transmit_standard(&self, raw: &MessageRaw, block: bool) {
         // RTR False
-        let standard_id =
-            embedded_can::StandardId::new(raw.to_can_addr()).expect("This should create a message");
-        let id = embedded_can::Id::Standard(standard_id);
-        let hdr = can::frame::Header::new(id, raw.length(), false);
-        let frame = can::frame::Frame::new(hdr, raw.data_as_slice()).unwrap();
-        info!(
+        let frame = raw.to_can_frame();
+        defmt::debug!(
             "CAN TX: Transmitting {:?} {:#02x} {:?}",
             raw,
             raw.to_can_addr(),
             frame
         );
-        // FIXME: This can hang. We should hide it behind our own queue.
-        let removed_frame = can.write(&frame).await;
-        if removed_frame.is_some() {
-            defmt::warn!("CAN output queue is full. We've removed lower-priority message {:?}",
-                         removed_frame);
+        let mut tx = self.can_tx.lock().await;
+        let ret = tx.try_write(frame);
+        if ret.is_err() {
             status::COUNTERS.can_queue_full.inc();
+            if !block {
+                defmt::warn!("Output CAN buffer is full - not blocking. Message will be dropped");
+            } else {
+                defmt::warn!("Output CAN buffer is full - will block and wait.");
+                let frame = raw.to_can_frame();
+                tx.write(frame).await;
+            }
         }
     }
 
     /// Schedule transmission of a interconnect message - from this node.
-    pub async fn transmit_response(&self, msg: &Message) {
+    /// TODO: Nicer API than bool?
+    pub async fn transmit_response(&self, msg: &Message, block: bool) {
         let raw = msg.to_raw(LOCAL_ADDRESS);
-        self.transmit_standard(&raw).await;
+        self.transmit_standard(&raw, block).await;
     }
 
-    pub async fn transmit_request(&self, dst_addr: u8, msg: &Message) {
+    pub async fn transmit_request(&self, dst_addr: u8, msg: &Message, block: bool) {
         let raw = msg.to_raw(dst_addr);
-        self.transmit_standard(&raw).await;
+        self.transmit_standard(&raw, block).await;
     }
 }

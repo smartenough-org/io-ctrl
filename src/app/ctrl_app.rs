@@ -13,7 +13,6 @@ use crate::buttonsmash::consts::BINDINGS_COUNT;
 use crate::buttonsmash::{Event, EventChannel, Executor, Opcode};
 use crate::config;
 use crate::io::event_converter::run_event_converter;
-use crate::io::events::Trigger;
 
 /// High-level command queue that are consumed by executor.
 static EVENT_CHANNEL: EventChannel = EventChannel::new();
@@ -104,7 +103,7 @@ impl CtrlApp {
 
         self.board
             .interconnect
-            .transmit_response(&welcome_message)
+            .transmit_response(&welcome_message, false)
             .await;
 
         // This might fail within tasks on i²c/CAN communication with expanders.
@@ -167,18 +166,22 @@ pub async fn task_read_interconnect(board: &'static Board) {
         // Are we the addressee?
         let to_us = match raw.addr_type().0 {
             config::LOCAL_ADDRESS => {
-                defmt::warn!("Message is addressed to us - {}",
-                             config::LOCAL_ADDRESS);
+                defmt::warn!("Message is addressed to us - {}", config::LOCAL_ADDRESS);
                 true
             }
             config::BROADCAST_ADDRESS => {
-                defmt::warn!("Message is addressed to broadcast {}.",
-                             config::BROADCAST_ADDRESS);
+                defmt::warn!(
+                    "Message is addressed to broadcast {}.",
+                    config::BROADCAST_ADDRESS
+                );
                 true
             }
             addr => {
-                defmt::warn!("Message is not addressed to us. (addr {} != local {})",
-                             addr, config::LOCAL_ADDRESS);
+                defmt::warn!(
+                    "Message is not addressed to us. (addr {} != local {})",
+                    addr,
+                    config::LOCAL_ADDRESS
+                );
                 false
             }
         };
@@ -279,7 +282,8 @@ pub async fn task_read_interconnect(board: &'static Board) {
                     continue;
                 }
                 let msg = Message::Pong { body };
-                board.interconnect.transmit_response(&msg).await;
+                // NOTE: Should this be blocking? We just got message so CAN should be operational.
+                board.interconnect.transmit_response(&msg, true).await;
             }
 
             // Those are not required on endpoints.
