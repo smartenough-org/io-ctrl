@@ -65,7 +65,6 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
                     expander.set_low(io_within).await?
                 }
             }
-
             Ok(())
         } else {
             defmt::error!("Unable to find output with ID {}", io_idx);

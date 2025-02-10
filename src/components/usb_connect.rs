@@ -169,7 +169,10 @@ impl CommProtocol {
                             defmt::info!("USB RX: {} {:?}", bytes, &usb_buf[0..bytes]);
                             if let Some(msg) = CommPacket::deserialize_from(&usb_buf[0..bytes]) {
                                 if self.usb_down.len() >= 1 {
-                                    defmt::warn!("Non-empty queue (len={}) when sending msg from USB.", self.usb_down.len());
+                                    defmt::warn!(
+                                        "Non-empty queue (len={}) when sending msg from USB.",
+                                        self.usb_down.len()
+                                    );
                                 }
                                 self.usb_down.send(msg).await;
                                 continue;

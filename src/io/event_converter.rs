@@ -2,20 +2,7 @@ use crate::buttonsmash::{Event, EventChannel};
 use crate::io::events::{InputChannel, SwitchState, Trigger};
 
 /// Max time [ms] until which the activation ends in ShortClick.
-const MAX_SHORT_MS: u32 = 300;
-
-/*
-    pub fn try_read_events(&self) -> Option<ButtonEvent> {
-        let ret = self.output_q.try_receive();
-        match ret {
-            Ok(event) => Some(event),
-            Err(err) => {
-                defmt::info!("Error while reading channel {:?}", err);
-                None
-            }
-        }
-    }
-*/
+const MAX_SHORT_MS: u32 = 400;
 
 #[embassy_executor::task(pool_size = 1)]
 pub async fn run_event_converter(input_q: &'static InputChannel, output_q: &'static EventChannel) {

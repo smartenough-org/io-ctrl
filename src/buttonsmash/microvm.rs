@@ -69,12 +69,20 @@ impl<const BN: usize> Executor<BN> {
     async fn emit(&self, command: IOCommand) {
         defmt::info!("Emiting from executor {:?}", command);
 
+        // TODO: Maybe some timeout in case it breaks and we don't want to hang?
+        // This should rather block in case of problems. The problems should not
+        // happen downstream (eg. infinitely awaiting on PCF)
+        if self.output_channel.try_send(command.clone()).is_err() {
+            defmt::warn!("Output channel is full! Hanging.");
+            status::COUNTERS.input_queue_full.inc();
+            self.output_channel.send(command.clone()).await;
+        }
+
         // TODO: I've mixed feeling about handling this in emit(). Move lower
         // and create emit_message and emit_io?
         let message = match &command {
             IOCommand::ToggleOutput(out) => Message::OutputChanged {
                 output: *out,
-                // TODO: Add absolute data
                 state: args::OutputState::Toggle,
             },
             IOCommand::ActivateOutput(out) => Message::OutputChanged {
@@ -87,14 +95,8 @@ impl<const BN: usize> Executor<BN> {
             },
         };
 
-        // TODO: Maybe some timeout in case it breaks and we don't want to hang?
-        if self.output_channel.try_send(command.clone()).is_err() {
-            defmt::error!("Output channel is full! Hanging.");
-            status::COUNTERS.input_queue_full.inc();
-            self.output_channel.send(command.clone()).await;
-        }
-
-        // Transmit information over CAN
+        // Transmit information over CAN.
+        // TODO: This should not block and in case of broken CAN communication be ignored.
         self.interconnect.transmit_response(&message).await;
     }
 
@@ -321,8 +323,6 @@ impl<const BN: usize> Executor<BN> {
                     Some(data.trigger),
                 );
                 if let Some(binding) = binding {
-                    defmt::info!("Found matching event {:?}", binding.action);
-
                     match binding.action {
                         Action::Noop => {}
                         Action::Single(cmd) => match cmd {
