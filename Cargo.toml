@@ -16,10 +16,13 @@ bus-addr-gate = []
 bus-addr-1 = []
 # dining room 1st floor
 bus-addr-2 = []
+
+# 3 - 9 reserved for 1st floor.
+
 # west 2nd floor
-bus-addr-3 = []
+bus-addr-10 = []
 # east 2nd floor
-bus-addr-4 = []
+bus-addr-11 = []
 
 [dependencies]
 # Basic set

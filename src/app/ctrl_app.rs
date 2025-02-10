@@ -11,6 +11,7 @@ use crate::components::status;
 
 use crate::buttonsmash::consts::BINDINGS_COUNT;
 use crate::buttonsmash::{Event, EventChannel, Executor, Opcode};
+use crate::config;
 use crate::io::event_converter::run_event_converter;
 use crate::io::events::Trigger;
 
@@ -38,9 +39,10 @@ impl CtrlApp {
 
     /// Returns hard-configured Executor. TODO: This is temporary.
     async fn configure(executor: &mut Executor<BINDINGS_COUNT>) {
-        const PROGRAM: [Opcode; 25] = [
+        let program = [
             // Setup proc.
             Opcode::Start(0),
+            // Basic usable program for initial setup.
             Opcode::LayerDefault,
             Opcode::BindShortToggle(1, 1),
             Opcode::BindShortToggle(2, 2),
@@ -58,6 +60,7 @@ impl CtrlApp {
             Opcode::BindShortToggle(14, 14),
             Opcode::BindShortToggle(15, 15),
             Opcode::BindShortToggle(16, 16),
+            // Opcode::BindLongActivate(1, 2),
             Opcode::Stop,
             /*
             Opcode::BindShortToggle(1, 10),
@@ -76,9 +79,12 @@ impl CtrlApp {
             Opcode::Activate(101),
             Opcode::Deactivate(110),
             Opcode::Stop,
+            Opcode::Start(2),
+            Opcode::Noop,
+            Opcode::Stop,
         ];
 
-        executor.load_static(&PROGRAM).await;
+        executor.load_static(&program).await;
     }
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
@@ -107,9 +113,10 @@ impl CtrlApp {
         let mut cnt = 0;
         loop {
             // Prevent deep sleep to allow easy remote debugging.
-            Timer::after(Duration::from_millis(2)).await;
+            // TODO: Remove for production.
+            Timer::after(Duration::from_millis(20)).await;
             cnt += 1;
-            if cnt % 3000 == 0 {
+            if cnt % 300 == 0 {
                 defmt::info!("Tick: {:?}", status::COUNTERS);
             }
             // embassy_futures::yield_now().await;
@@ -140,28 +147,61 @@ pub async fn task_read_interconnect(board: &'static Board) {
         let raw = board.interconnect.receive().await;
         defmt::info!("Received raw message {}", raw);
 
-        let message = if let Ok(raw) = raw {
-            let maybe = Message::from_raw(&raw);
-            if let Ok(message) = maybe {
-                message
-            } else {
-                continue;
-            }
+        // CAN level parsing.
+        let raw = if let Ok(raw) = raw {
+            raw
+        } else {
+            // Error in frame. Duhno how to handle. Might need hard restart maybe?
+            status::COUNTERS.can_frame_error.inc();
+            continue;
+        };
+
+        // Semantic message parsing.
+        let message = if let Ok(message) = Message::from_raw(&raw) {
+            message
         } else {
             defmt::warn!("Error while reading a message {:?}", raw);
             continue;
         };
 
+        // Are we the addressee?
+        let to_us = match raw.addr_type().0 {
+            config::LOCAL_ADDRESS => {
+                defmt::warn!("Message is addressed to us - {}",
+                             config::LOCAL_ADDRESS);
+                true
+            }
+            config::BROADCAST_ADDRESS => {
+                defmt::warn!("Message is addressed to broadcast {}.",
+                             config::BROADCAST_ADDRESS);
+                true
+            }
+            addr => {
+                defmt::warn!("Message is not addressed to us. (addr {} != local {})",
+                             addr, config::LOCAL_ADDRESS);
+                false
+            }
+        };
+
         match message {
             Message::CallProcedure { proc_id } => {
+                if !to_us {
+                    continue;
+                }
                 defmt::warn!("TODO: Call procedure {}", proc_id);
             }
 
             Message::TriggerInput { input, trigger } => {
+                if !to_us {
+                    continue;
+                }
                 defmt::warn!("TODO: Emulate input trigger {} as {:?}", input, trigger);
             }
 
             Message::SetOutput { output, state } => {
+                if !to_us {
+                    continue;
+                }
                 let event = match state {
                     args::OutputState::On => Event::RemoteActivate(output),
                     args::OutputState::Off => Event::RemoteDeactivate(output),
@@ -180,6 +220,11 @@ pub async fn task_read_interconnect(board: &'static Board) {
                 second,
                 day_of_week,
             } => {
+                // This one is a broadcast. We don't send those.
+                if to_us {
+                    defmt::warn!("Message error. TimeAnnouncement sent... from us?");
+                    continue;
+                }
                 let dow = match day_of_week {
                     0 => DayOfWeek::Monday,
                     1 => DayOfWeek::Tuesday,
@@ -222,7 +267,19 @@ pub async fn task_read_interconnect(board: &'static Board) {
             }
 
             Message::RequestStatus => {
+                if !to_us {
+                    continue;
+                }
                 defmt::info!("TODO: Send our status");
+                // TODO: This needs access to inputs / outputs and uptime. MicroVM has it?
+            }
+
+            Message::Ping { body } => {
+                if !to_us {
+                    continue;
+                }
+                let msg = Message::Pong { body };
+                board.interconnect.transmit_response(&msg).await;
             }
 
             // Those are not required on endpoints.
@@ -230,14 +287,14 @@ pub async fn task_read_interconnect(board: &'static Board) {
             | Message::Info { .. }
             | Message::OutputChanged { .. }
             | Message::InputTriggered { .. }
+            | Message::Pong { .. }
             | Message::Status { .. } => {
-                defmt::info!("Got unhandled message, ignoring: {:?}", message);
+                if to_us {
+                    defmt::warn!("Unhandled message was addressed to us: {:?}", message);
+                } else {
+                    defmt::debug!("Ignoring unhandled message: {:?}", message);
+                }
             }
         }
-
-        // TODO: That's an example. Do a proper conversion.
-        EVENT_CHANNEL
-            .send(Event::new_button(32, Trigger::ShortClick))
-            .await;
     }
 }

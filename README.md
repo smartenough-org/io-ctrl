@@ -4,7 +4,7 @@ IO Controller for SmartEnough
 IO Controller sits in your electrical box, reads inputs (switches) and changes
 state of relays (lights or other things).
 
-- System is distributed for reliability (and shorter cables).
+- System is distributed for reliability (and shorter power cables).
 - CAN BUS communication between modules.
 - Read inputs via PCF IO expander.
 - Controls outputs via PCF IO expander.

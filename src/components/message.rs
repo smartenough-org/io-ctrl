@@ -52,6 +52,8 @@ mod msg_type {
     /// CRC, apply if matches.
     pub const MICROCODE_UPDATE_END: u8 = 0x1B;
     */
+    pub const PONG: u8 = 0x1D;
+    pub const PING: u8 = 0x1E;
 
     // 0x1F Reserved for low-priority grouped type
 }
@@ -147,8 +149,12 @@ pub enum Message {
         trigger: args::Trigger,
     },
 
-    /// Ping. TODO: Handle RTR?
+    /// Better Ping. TODO: Handle RTR?
     RequestStatus,
+    /// Initial Ping that has some simple data to return in Pong.
+    Ping { body: u16 },
+    /// Response to Ping.
+    Pong { body: u16 },
 
     /// Periodic not triggered by event status.
     Status {
@@ -323,6 +329,14 @@ impl Message {
 
             msg_type::REQUEST_STATUS => Ok(Message::RequestStatus),
 
+            msg_type::PING => Ok(Message::Ping {
+                body: u16::from_le_bytes([raw.data[0], raw.data[1]]),
+            }),
+
+            msg_type::PONG => Ok(Message::Pong {
+                body: u16::from_le_bytes([raw.data[0], raw.data[1]]),
+            }),
+
             msg_type::INFO | msg_type::ERROR | msg_type::STATUS => {
                 defmt::info!("Ignoring info/error/status message: {:?}", raw);
                 Err(())
@@ -388,6 +402,21 @@ impl Message {
                 raw.data[4..6].copy_from_slice(&inputs.to_le_bytes());
                 raw.data[6..8].copy_from_slice(&outputs.to_le_bytes());
             }
+            Message::Ping { body } => {
+                raw.msg_type = msg_type::PING;
+                raw.length = 2;
+                raw.data[0..2].copy_from_slice(&body.to_le_bytes());
+            }
+            Message::Pong { body } => {
+                raw.msg_type = msg_type::PONG;
+                raw.length = 2;
+                raw.data[0..2].copy_from_slice(&body.to_le_bytes());
+            }
+            Message::CallProcedure { proc_id } => {
+                raw.msg_type = msg_type::CALL_PROC;
+                raw.length = 1;
+                raw.data[0] = *proc_id;
+            }
             /* we only parse those.
             Message::TimeAnnouncement { year, month, day, hour, minute, second } => todo!(),
             Message::MicrocodeUpdateInit { addr, length } => todo!(),
@@ -395,11 +424,12 @@ impl Message {
             Message::MicrocodeUpdateEnd { chunks, length, crc } => todo!(),
             Message::MicrocodeUpdateAck { length } => todo!(),
             */
-            _ => {
+            Message::TriggerInput { .. }
+            | Message::RequestStatus { .. }
+            | Message::TimeAnnouncement { .. } => {
                 panic!("Not implemented method requested");
             }
         }
-
         raw
     }
 }

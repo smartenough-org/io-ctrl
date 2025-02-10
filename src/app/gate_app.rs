@@ -70,7 +70,10 @@ pub async fn task_read_interconnect(board: &'static Board) {
             buf.count = 3 + msg.length();
 
             if board.usb_up.len() >= 1 {
-                defmt::warn!("Non-empty queue (len={}) when sending to USB.", board.usb_up.len());
+                defmt::warn!(
+                    "Non-empty queue (len={}) when sending to USB.",
+                    board.usb_up.len()
+                );
             }
             board.usb_up.send(buf).await;
         } else {
@@ -96,7 +99,7 @@ pub async fn task_read_usb(board: &'static Board) {
         let raw = MessageRaw::from_bytes(raw.data[0], raw.data[1], body);
 
         if let Ok(msg) = Message::from_raw(&raw) {
-            defmt::info!("Parsed message is {:?} -> {:?}.", raw, msg);
+            defmt::info!("Parsed message is {:?} from raw {:?}.", msg, raw);
         } else {
             defmt::info!("Unable to parse message {:?}", raw)
         }

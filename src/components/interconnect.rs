@@ -53,6 +53,7 @@ impl Interconnect {
                 };
 
                 let length: usize = rx_frame.header().len().into();
+
                 let delta = if ts > start {
                     // This panics on start > ts
                     (ts - start).as_millis()
@@ -70,6 +71,21 @@ impl Interconnect {
                 Ok(MessageRaw::from_can(addr, &rx_frame.data()[0..length]))
             }
             Err(_err) => {
+                // FIXME: This can start looping wildly on gate.
+                /*
+                 * 17251.164398 ERROR Error in frame
+                 * └─ io_ctrl::components::interconnect::{impl#0}::receive::{async_fn#0} @ src/components/interconnect.rs:74
+                 * 17251.164398 INFO  Interconnect: Received message Err(()). Pushing to USB.
+                 * └─ io_ctrl::app::gate_app::__task_read_interconnect_task::{async_fn#0} @ src/app/gate_app.rs:69
+                 * 17251.164428 WARN  Error while reading a message Err(())
+                 * └─ io_ctrl::app::gate_app::__task_read_interconnect_task::{async_fn#0} @ src/app/gate_app.rs:83
+                 * 17251.164459 ERROR Error in frame
+                 * └─ io_ctrl::components::interconnect::{impl#0}::receive::{async_fn#0} @ src/components/interconnect.rs:74
+                 * 17251.164459 INFO  Interconnect: Received message Err(()). Pushing to USB.
+                 * └─ io_ctrl::app::gate_app::__task_read_interconnect_task::{async_fn#0} @ src/app/gate_app.rs:69
+                 * 17251.164489 WARN  Error while reading a message Err(())
+                 * └─ io_ctrl::app::gate_app::__task_read_interconnect_task::{async_fn#0} @ src/app/gate_app.rs:83
+                 */
                 error!("Error in frame");
                 Err(())
             }
@@ -90,7 +106,13 @@ impl Interconnect {
             raw.to_can_addr(),
             frame
         );
-        _ = can.write(&frame).await;
+        // FIXME: This can hang. We should hide it behind our own queue.
+        let removed_frame = can.write(&frame).await;
+        if removed_frame.is_some() {
+            defmt::warn!("CAN output queue is full. We've removed lower-priority message {:?}",
+                         removed_frame);
+            status::COUNTERS.can_queue_full.inc();
+        }
     }
 
     /// Schedule transmission of a interconnect message - from this node.

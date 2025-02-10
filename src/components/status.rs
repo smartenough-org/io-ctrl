@@ -47,6 +47,10 @@ pub struct Counters {
     pub expander_input_error: Counter,
     /// Error while reading output IO expander
     pub expander_output_error: Counter,
+    /// Error from CAN firmware while reading frames.
+    pub can_frame_error: Counter,
+    /// Output CAN queue is full.
+    pub can_queue_full: Counter,
 }
 
 pub static COUNTERS: Counters = Counters {
@@ -54,6 +58,8 @@ pub static COUNTERS: Counters = Counters {
     output_queue_full: Counter::new(),
     expander_input_error: Counter::new(),
     expander_output_error: Counter::new(),
+    can_frame_error: Counter::new(),
+    can_queue_full: Counter::new(),
 };
 
 impl Counters {
@@ -63,6 +69,8 @@ impl Counters {
             || self.output_queue_full.get() > 0
             || self.expander_input_error.get() > 0
             || self.expander_output_error.get() > 0
+            || self.can_frame_error.get() > 0
+            || self.can_queue_full.get() > 0
     }
 }
 
