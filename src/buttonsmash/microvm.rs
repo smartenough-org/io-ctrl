@@ -17,14 +17,32 @@ use crate::components::{
 };
 use crate::io::events::Trigger;
 
+/// MicroVM holds internal state that can be queried by code.
+pub struct BoardState {
+    /// TODO: In progress.
+    registers: [u8; REGISTERS],
+    /// True if active - local cache of set state, independent of queue.
+    /// This might break a bit with timed activations. Unsure how to proceed with those.
+    outputs: [bool; 32],
+}
+
+impl Default for BoardState {
+    fn default() -> Self {
+        Self {
+            registers: [0; REGISTERS],
+            outputs: [false; 32],
+        }
+    }
+}
+
 /// Executes actions using a program.
 pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
     layers: Layers,
     bindings: BindingList<BINDINGS>,
     opcodes: [Opcode; OPCODES],
     procedures: [usize; MAX_PROCEDURES],
-    /// List of registers that can hold ProcId numbers.
-    registers: [u8; REGISTERS],
+    // Cached state of the board and VM registers/state.
+    state: BoardState,
 
     // Our outputs
     output_channel: &'static OutputChannel,
@@ -49,7 +67,7 @@ impl<const BN: usize> Executor<BN> {
             bindings: BindingList::new(),
             opcodes: [Opcode::Noop; 1024],
             procedures: [0; MAX_PROCEDURES],
-            registers: [0; REGISTERS],
+            state: BoardState::default(),
             output_channel: queue,
             interconnect,
         }
@@ -66,7 +84,7 @@ impl<const BN: usize> Executor<BN> {
     }
 
     /// Handle outputs from Executor.
-    async fn emit(&self, command: IOCommand) {
+    async fn emit(&mut self, command: IOCommand) {
         defmt::info!("Emiting from executor {:?}", command);
 
         // TODO: Maybe some timeout in case it breaks and we don't want to hang?
@@ -78,12 +96,29 @@ impl<const BN: usize> Executor<BN> {
             self.output_channel.send(command.clone()).await;
         }
 
+        // Update local state
+        match &command {
+            IOCommand::ToggleOutput(out) => {
+                self.state.outputs[*out as usize] = !self.state.outputs[*out as usize];
+            },
+            IOCommand::ActivateOutput(out) => {
+                self.state.outputs[*out as usize] = true;
+            },
+            IOCommand::DeactivateOutput(out) => {
+                self.state.outputs[*out as usize] = false;
+            },
+        };
+
         // TODO: I've mixed feeling about handling this in emit(). Move lower
         // and create emit_message and emit_io?
         let message = match &command {
             IOCommand::ToggleOutput(out) => Message::OutputChanged {
                 output: *out,
-                state: args::OutputState::Toggle,
+                state: if self.state.outputs[*out as usize] {
+                    args::OutputState::On
+                } else {
+                    args::OutputState::Off
+                },
             },
             IOCommand::ActivateOutput(out) => Message::OutputChanged {
                 output: *out,
@@ -96,7 +131,7 @@ impl<const BN: usize> Executor<BN> {
         };
 
         // Transmit information over CAN.
-        // TODO: This should not block and in case of broken CAN communication be ignored.
+        // In case of broken CAN communication this will be ignored.
         self.interconnect.transmit_response(&message, false).await;
     }
 
@@ -146,10 +181,10 @@ impl<const BN: usize> Executor<BN> {
             }
             */
             Opcode::CallRegister(register) => {
-                return MicroState::CallProc(self.registers[register as usize] as usize);
+                return MicroState::CallProc(self.state.registers[register as usize] as usize);
             }
             Opcode::SetRegister(register, value) => {
-                self.registers[register as usize] = value;
+                self.state.registers[register as usize] = value;
             }
             Opcode::Toggle(out_idx) => {
                 self.emit(IOCommand::ToggleOutput(out_idx)).await;
