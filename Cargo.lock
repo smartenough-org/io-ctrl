@@ -223,6 +223,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "ector"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "171774929044d811736a6498d50fedd2d4d9ededc035073420deaefc15db7b35"
+dependencies = [
+ "ector-macros",
+ "embassy-executor",
+ "embassy-sync",
+ "futures",
+ "log",
+ "portable-atomic",
+ "static_cell",
+]
+
+[[package]]
+name = "ector-macros"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a39444881d223c9d51d936d2a4631df71d4c00e8edbc167303bfb89d6353d418"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "embassy-embedded-hal"
 version = "0.3.0"
 dependencies = [
@@ -614,6 +640,7 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "defmt",
+ "ector",
  "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",

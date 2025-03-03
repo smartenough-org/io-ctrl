@@ -1,11 +1,11 @@
 /*
-TODO: We lack the ability to toggle a group on/off if say one lamp from the group is
-already enabled.
+ * TODO: We lack the ability to toggle a group on/off if say one lamp from the group is
+ * already enabled.
 */
 
 use super::bindings::*;
 use super::consts::{
-    Command, Event, EventChannel, InIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS,
+    Command, Event, EventChannel, InIdx, OutIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS
 };
 use super::layers::Layers;
 use super::opcodes::Opcode;
@@ -325,7 +325,7 @@ impl<const BN: usize> Executor<BN> {
         }
     }
 
-    /// Index procedures starts
+    /// Index procedures' starts
     fn index_code(&mut self) {
         for i in 0..MAX_PROCEDURES {
             self.procedures[i] = 0;

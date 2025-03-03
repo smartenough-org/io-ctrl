@@ -119,26 +119,27 @@ impl Board {
         /* TODO: Assumption we have up to 3 expanders. One for outputs, second
          * for inputs (light, switches), third one for sensors */
         // Inputs - light switches.
-        let inputs = Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
+        let io_ex_inputs = Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
 
         // Inputs - sensors.
-        let _sensors = Pcf8575::new(I2cDevice::new(i2c_bus), true, true, false);
+        let _io_ex_sensors = Pcf8575::new(I2cDevice::new(i2c_bus), true, true, false);
 
         // Outputs
-        let outputs = Pcf8575::new(I2cDevice::new(i2c_bus), false, false, false);
+        let io_ex_outputs = Pcf8575::new(I2cDevice::new(i2c_bus), false, false, false);
 
         let expander_switches = ExpanderSwitches::new(
-            inputs,
+            io_ex_inputs,
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
             &INPUT_CHANNEL,
             status,
         );
 
-        let expander_outputs = ExpanderOutputs::new(outputs);
+        let expander_outputs = ExpanderOutputs::new(io_ex_outputs);
 
         let indexed_outputs = Mutex::new(IndexedOutputs::new(
             [expander_outputs],
             [
+                // That's just example on how to add native IOs to outputs.
                 Output::new(p.PB3, Level::High, Speed::Low),
                 Output::new(p.PB4, Level::High, Speed::Low),
             ],
