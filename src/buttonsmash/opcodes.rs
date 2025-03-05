@@ -1,6 +1,8 @@
 use super::consts::{InIdx, LayerIdx, OutIdx, ProcIdx};
 
 /// Opcodes of the internal micro vm.
+/// Keep opcode argument length < 6B so it can be send completely
+/// over a standard CAN message.
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Opcode {
     /// No operation

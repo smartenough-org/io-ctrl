@@ -170,12 +170,10 @@ impl<const N: usize> BindingList<N> {
     }
 }
 
-#[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
-    #[test]
-    fn it_adds_and_finds() {
+    pub fn it_adds_and_finds() {
         let mut blst: BindingList<30> = BindingList::new();
         assert_eq!(blst.added, 0);
         for binding in [
