@@ -5,7 +5,7 @@
 
 use super::bindings::*;
 use super::consts::{
-    Command, Event, EventChannel, InIdx, OutIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS
+    Command, Event, EventChannel, InIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS,
 };
 use super::layers::Layers;
 use super::opcodes::Opcode;
@@ -100,13 +100,13 @@ impl<const BN: usize> Executor<BN> {
         match &command {
             IOCommand::ToggleOutput(out) => {
                 self.state.outputs[*out as usize] = !self.state.outputs[*out as usize];
-            },
+            }
             IOCommand::ActivateOutput(out) => {
                 self.state.outputs[*out as usize] = true;
-            },
+            }
             IOCommand::DeactivateOutput(out) => {
                 self.state.outputs[*out as usize] = false;
-            },
+            }
         };
 
         // TODO: I've mixed feeling about handling this in emit(). Move lower
@@ -393,7 +393,6 @@ impl<const BN: usize> Executor<BN> {
             Event::RemoteToggle(out_idx) => {
                 self.emit(IOCommand::ToggleOutput(out_idx)).await;
             }
-
             Event::RemoteActivate(out_idx) => {
                 self.emit(IOCommand::ActivateOutput(out_idx)).await;
             }

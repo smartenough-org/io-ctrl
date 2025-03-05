@@ -1,7 +1,8 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 # replace nRF82840_xxAA with your chip as listed in `probe-rs chip list`
 # Can try probe-rs after 0.19 again.
-runner = "probe-rs run --chip STM32G431CBUx --always-print-stacktrace --log-file /dev/null"
+runner = "probe-rs run --chip STM32G431CBUx --preverify --log-file /dev/null"
+# runner = "probe-rs run --chip STM32G431CBUx --preverify --always-print-stacktrace --log-file /dev/null"
 # runner = "probe-run --measure-stack --chip STM32G431CBUx"
 
 [build]

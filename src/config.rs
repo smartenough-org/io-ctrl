@@ -3,6 +3,8 @@
 /* NOTE: This could be generics maybe, but maybe const is good enough. */
 // pub const MAX_ACTIONS: usize = 32;
 
+pub const MAX_SHUTTERS: usize = 8;
+
 // Max address is 0x3F for compatibility with 11-bit CAN
 // TODO: Maybe env!() instead?
 #[cfg(feature = "bus-addr-gate")]
