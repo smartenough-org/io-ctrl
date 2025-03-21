@@ -14,9 +14,10 @@ mod tests {
     async fn init() {}
 
     #[test]
-    fn shutters() {
+    #[timeout(3)]
+    async fn single_shutter() {
         use io_ctrl::buttonsmash::shutters;
-        shutters::tests::it_builds();
+        shutters::tests::single_shutter().await;
     }
 
     #[test]
