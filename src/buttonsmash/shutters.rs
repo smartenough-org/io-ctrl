@@ -13,6 +13,7 @@ use crate::buttonsmash::consts::{OutIdx, ShutterIdx};
 use crate::config::MAX_SHUTTERS;
 
 use defmt::Format;
+use defmt::{info, error};
 
 // TODO: Maybe that should be time hysteresis for both cases?
 /// Accuracy of position that's considered good enough. In percentage points.
@@ -53,6 +54,7 @@ enum Cmd {
 /// Current or planned shutter position.
 #[derive(Format, Debug, Clone, Eq, PartialEq)]
 struct Position {
+    // TODO: Height/Tilt should be an Enum - Known / Guessed. To mark when the position is not synchronized.
     /// Position of shutters. 0 (open) - 100% (closed)
     height: u8,
     /// 0 (open) - 100% (closed)
@@ -80,15 +82,6 @@ pub struct Config {
     pub over_time: Duration,
 }
 
-/// Shutter movement plan. Complete movement might consist of first going down
-/// and then up to tilt the shutter.
-#[derive(Format, Debug, Eq, PartialEq)]
-struct Plan {
-    start: Instant,
-    from: Position,
-    to: Position,
-}
-
 /// Internal state machine for changing state in asynchronous manner.
 #[derive(Format, Debug, Eq, PartialEq)]
 enum Action {
@@ -100,7 +93,6 @@ enum Action {
 
     /// Currently moving down since Instant to close or increase tilt.
     Down(Instant),
-
 
     /// Waiting between changing directions
     Cooldown(Instant),
@@ -125,8 +117,8 @@ pub struct Shutter<'a> {
 
 impl Format for Shutter<'_> {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "Shutter {{cfg={:?} pos={:?} target={:?} action={:?}}}",
-                      self.cfg, self.position, self.target, self.action);
+        defmt::write!(fmt, "Shutter {{pos={:?} target={:?} action={:?}}}",
+                      self.position, self.target, self.action);
     }
 }
 
@@ -189,7 +181,13 @@ impl Config {
 }
 
 impl Position {
-    pub fn new() -> Self {
+    pub fn new(height: u8, tilt: u8) -> Self {
+        assert!(height <= 100);
+        assert!(tilt <= 100);
+        Self { height, tilt }
+    }
+
+    pub fn new_zero() -> Self {
         Self { height: 0, tilt: 0 }
     }
 }
@@ -199,8 +197,8 @@ impl<'a> Shutter<'a> {
         Self {
             output_channel,
             cfg: Config::new(up, down),
-            position: Position::new(),
-            target: Position::new(),
+            position: Position::new_zero(),
+            target: Position::new_zero(),
             action: Action::Idle,
             in_sync: false,
         }
@@ -225,6 +223,7 @@ impl<'a> Shutter<'a> {
                 return (self.position.tilt, Duration::from_secs(0));
             }
         };
+
         let max_time = self.cfg.tilt_as_time(self.position.tilt, max_tilt);
         let elapsed = now.duration_since(since);
 
@@ -239,14 +238,14 @@ impl<'a> Shutter<'a> {
             assert!(tilted < 100); // from other limit
             let mut tilt = self.position.tilt as i32;
             tilt += dir as i32 * self.cfg.time_as_tilt(elapsed) as i32;
-            assert!(tilt > 0 && tilt <= 100);
+            assert!(tilt >= 0 && tilt <= 100);
             return (tilt as u8, elapsed - consumed_time)
         }
     }
 
     // Consume time for movement. Tilt should be calculated first.
     fn consume_height(&self, elapsed: Duration) -> u8 {
-        let (dir, max_tilt, conf_time) = match self.action {
+        let (dir, _max_tilt, _conf_time) = match self.action {
             Action::Up(_since) => {
                 // Up, opens. Towards 0.
                 (-1i64, 0, self.cfg.rise_time.as_millis())
@@ -312,6 +311,10 @@ impl<'a> Shutter<'a> {
         // Step I: Update tilt / height if we are in motion.
         let (tilt, elapsed) = self.consume_tilt(now);
         let height = self.consume_height(elapsed);
+        info!("Update: from h{}t{} -> h{}t{} delta h{}t{} in {}",
+              self.position.height, self.position.tilt,
+              self.target.height, self.target.tilt,
+              tilt, height, elapsed);
 
         self.position.tilt = tilt;
         self.position.height = height;
@@ -321,29 +324,41 @@ impl<'a> Shutter<'a> {
         match &self.action {
             Action::Idle => {
                 // We are inactive, and new action can be started.
-                if self.target.height > self.position.height + HYSTERESIS {
-                    // We should move up.
-                    self.action = Action::Up(now);
-                    self.go_up().await;
-                    // Return 0 to we got called again shortly and calculate proper time.
-                    return Duration::from_secs(0);
-                } else if self.target.height < self.position.height - HYSTERESIS {
-                    // We should move down.
-                    self.action = Action::Down(now);
-                    self.go_down().await;
-                    return Duration::from_secs(0);
-                } else if self.target.tilt > self.position.tilt + HYSTERESIS_TILT {
-                    // Tilt is too high, we should move `up` to open the shutters angle.
-                    self.action = Action::Up(now);
-                    self.go_up().await;
-                    return Duration::from_secs(0);
-                } else if self.target.tilt < self.position.tilt - HYSTERESIS_TILT {
-                    // Tilt is too low (we are too open), move down a bit.
-                    self.action = Action::Down(now);
-                    self.go_down().await;
-                    return Duration::from_secs(0);
+                let height_diff = self.target.height.abs_diff(self.position.height);
+                let tilt_diff = self.target.tilt.abs_diff(self.position.tilt);
+
+                if height_diff > HYSTERESIS {
+                    if self.target.height < self.position.height {
+                        // We should move up.
+                        info!("INIT: Idle -> Up (Height)");
+                        self.action = Action::Up(now);
+                        self.go_up().await;
+                        // Return 0 to we got called again shortly and calculate proper time.
+                        return Duration::from_secs(0);
+                    } else {
+                        // We should move down.
+                        info!("INIT: Idle -> Down (Height)");
+                        self.action = Action::Down(now);
+                        self.go_down().await;
+                        return Duration::from_secs(0);
+                    }
+                } else if tilt_diff > HYSTERESIS_TILT {
+                    if self.target.tilt < self.position.tilt {
+                        // Tilt is too high, we should move `up` to open the shutters angle.
+                        info!("INIT: Idle -> Up (Tilt)");
+                        self.action = Action::Up(now);
+                        self.go_up().await;
+                        return Duration::from_secs(0);
+                    } else {
+                        // Tilt is too low (we are too open), move down a bit.
+                        info!("INIT: Idle -> Down (Tilt)");
+                        self.action = Action::Down(now);
+                        self.go_down().await;
+                        return Duration::from_secs(0);
+                    }
                 } else {
                     // Nothing is happening.
+                    info!("Idle -> Idle (10s)");
                     return Duration::from_secs(10);
                 }
             }
@@ -361,7 +376,7 @@ impl<'a> Shutter<'a> {
             Action::Up(_) => {
                 // We are going UP - to a smaller height values and smaller tilt values.
                 if self.position.height <= self.target.height {
-                    // Height achieved! What about the tilt?
+                    // Height achieved! What about the tilt? In UP, the tilt decreases.
                     if self.position.tilt <= self.target.tilt {
                         // Tilt achieved! Stop movement.
                         self.go_idle().await;
@@ -382,7 +397,7 @@ impl<'a> Shutter<'a> {
                     // Height achieved! What about the tilt?
                     if self.position.tilt >= self.target.tilt {
                         // Tilt achieved! Stop movement.
-                        self.go_idle();
+                        self.go_idle().await;
                         self.action = Action::Cooldown(now);
                         return COOLDOWN;
                     } else {
@@ -395,42 +410,6 @@ impl<'a> Shutter<'a> {
                 }
             }
         }
-
-        // Step II: New action starting.
-        let now = Instant::now();
-        let tilt_time = self.cfg.tilt_time as i32;
-        let (direction, initial_pos, tilt_cost, since, full_time) = match &self.action {
-            Action::Inactive => return,
-            Action::Up(_duration, initial_pos, since) => {
-                // Tilt decreases when going up, so we pay cost if it was closed.
-                let tilt_cost = initial_pos.tilt as i32 * tilt_time as i32 / MAX_TILT as i32;
-                (-1, initial_pos, tilt_cost, since, self.cfg.rise_time as i32)
-            }
-            Action::Down(_duration, initial_pos, since) => {
-                // Tilt increases when going down, so we pay cost if it was open.
-                let tilt_cost = (MAX_TILT - initial_pos.tilt) as i32 * tilt_time / MAX_TILT as i32;
-                (1, initial_pos, tilt_cost, since, self.cfg.drop_time as i32)
-            }
-        };
-        // TODO: Handle tilt. It should eat some time, but only in certain cases.
-        let mut in_motion_ms = now.duration_since(*since).as_millis() as i32;
-        if in_motion_ms > tilt_cost {
-            // We tilted and are changing height now.
-            if direction == -1 {
-                self.position.tilt = 0;
-            } else {
-                self.position.tilt = MAX_TILT;
-            }
-            in_motion_ms -= tilt_cost;
-        } else {
-            // Only tilt changed.
-            let tilted = direction * MAX_TILT as i32 * in_motion_ms / tilt_time;
-            self.position.tilt += tilted as u8;
-        }
-        let prcnt_moved: i32 = direction * 100 * in_motion_ms / full_time;
-        let position = initial_pos.height as i32 + prcnt_moved;
-        let position: u8 = position.clamp(0, 100) as u8;
-        self.position.height = position;
     }
 
     /// Finish current action. Return Some(time to wait until it finishes) or
@@ -449,7 +428,7 @@ impl<'a> Shutter<'a> {
     }
 
     // Initiate new movement.
-    async fn set_target(&mut self, now: Instant, position: Position) -> Duration {
+    async fn set_target(&mut self, now: Instant, target: Position) -> Duration {
         match self.action {
             Action::Idle => { /* Ok */ },
             Action::Cooldown(_) => { /* Ok */ },
@@ -457,7 +436,7 @@ impl<'a> Shutter<'a> {
                 panic!("Go action called when we're active {:?}. Finish first.", self.action);
             }
         }
-        self.target = position;
+        self.target = target;
         self.update(now).await
     }
 
@@ -466,23 +445,34 @@ impl<'a> Shutter<'a> {
         // New command invalidates any previous ones.
         // TODO: Don't stop sending UP signal only to send it in a second?
 
+        info!("Shutter command {:?} at state {:?}", cmd, self);
         // Update state (our current position).
         self.update(now).await;
         // Finish previous movement... TODO: Or not? If the direction matches?
         self.finish(now).await;
 
+        info!("Shutter after finishing previous actions: {:?}", self);
+
         let target = match cmd {
             Cmd::Go(target) => {
                 target
             }
-
             Cmd::Open => {
+                if !self.in_sync {
+                    // That's simplification
+                    self.position = Position::new(100, 100);
+                    self.in_sync = true;
+                }
                 Position {
                     height: 0,
                     tilt: 0,
                 }
             }
             Cmd::Close => {
+                if !self.in_sync {
+                    self.position = Position::new(0, 0);
+                    self.in_sync = true;
+                }
                 Position {
                     height: 100,
                     tilt: 100,
@@ -567,10 +557,15 @@ pub mod tests {
     use super::*;
     use crate::boards::OutputChannel;
 
-    pub fn it_builds() {
+    pub async fn single_shutter() {
+
         let channel = OutputChannel::new();
         let mut shutter = Shutter::new(1, 2, &channel);
-        defmt::info!("Empty: {:?}", shutter);
+
+        // Let's assume it thinks it's synced
+        shutter.in_sync = true;
+
+        defmt::info!("Initial test shutter: {:?}", shutter);
         assert_eq!(shutter.cfg.tilt_as_time(0, 100),
                    shutter.cfg.tilt_time);
         assert_eq!(shutter.cfg.tilt_as_time(100, 0),
@@ -584,17 +579,128 @@ pub mod tests {
                    shutter.cfg.drop_time);
         assert_eq!(shutter.cfg.travel_as_time(100, 0), // down
                    shutter.cfg.rise_time);
+        assert_eq!(shutter.action, Action::Idle);
+        assert!(channel.try_receive().is_err());
 
-        // It's already up, should be a noop.
-        let now = Instant::now();
-        shutter.command(Cmd::Open, now);
+        // It's already up, should be a noop and no commands sent.
+        let mut now = Instant::now();
+        shutter.command(Cmd::Open, now).await;
+        assert_eq!(shutter.action, Action::Idle);
+        assert!(channel.try_receive().is_err());
+
+        // Closing will make it go down.
+        shutter.command(Cmd::Close, now).await;
+        assert_eq!(shutter.action, Action::Down(now));
+
+        // Cleanup output queue.
+        assert!(channel.try_receive().is_ok());
+        assert!(channel.try_receive().is_ok());
+
+        // Nothing should change. Time didn't pass.
+        shutter.update(now).await;
+        assert_eq!(shutter.position.tilt, 0);
+        assert_eq!(shutter.position.height, 0);
+
+        now += shutter.cfg.tilt_time;
+
+        shutter.update(now).await;
+        assert_eq!(shutter.position.tilt, 100);
+        assert_eq!(shutter.position.height, 0);
+
+        // Let's wait 50% of drop time.
+        now += shutter.cfg.drop_time / 2;
+
+        shutter.update(now).await;
+        assert_eq!(shutter.position.tilt, 100);
+        assert_eq!(shutter.position.height, 50);
+        assert_ne!(shutter.action, Action::Idle);
+        assert_ne!(core::mem::discriminant(&shutter.action),
+                   core::mem::discriminant(&Action::Cooldown(now)));
+        assert!(channel.try_receive().is_err());
+
+        // Let's wait another 50% of time.
+        now += shutter.cfg.drop_time / 2;
+
+        shutter.update(now).await;
+        assert_eq!(shutter.position.tilt, 100);
+        assert_eq!(shutter.position.height, 100);
+        // Idle commands were sent.
+        assert!(channel.try_receive().is_ok());
+        assert!(channel.try_receive().is_ok());
+
+        let cooldown_start = now;
+        assert_eq!(shutter.action, Action::Cooldown(cooldown_start));
+
+        // Finish half of a cooldown period.
+        now += COOLDOWN / 2;
+        shutter.update(now).await;
+        assert_eq!(shutter.position.tilt, 100);
+        assert_eq!(shutter.position.height, 100);
+        assert!(channel.try_receive().is_err());
+        assert_eq!(shutter.action, Action::Cooldown(cooldown_start));
+
+        // Move to 50% height, but set tilt to 45deg. Still half cooldown period to go.
+        shutter.command(Cmd::Go(Position::new(50, 50)), now).await;
+        assert_eq!(shutter.action, Action::Cooldown(cooldown_start));
+
+        // Still idle after rest of cooldown.
+        now += COOLDOWN / 2;
+        shutter.update(now).await;
         assert_eq!(shutter.action, Action::Idle);
 
-        shutter.command(Cmd::Close, now);
-        if let Action::Up(_since) = &shutter.action {
-            assert!(true);
-        } else {
-            assert!(false);
-        }
+        // Will immediately start motion if Idle.
+        shutter.update(now).await;
+        assert_eq!(shutter.action, Action::Up(now));
+        assert!(channel.try_receive().is_ok());
+        assert!(channel.try_receive().is_ok());
+        assert_eq!(shutter.position.tilt, 100);
+        assert_eq!(shutter.position.height, 100);
+
+        // First we consume tilt.
+        now += shutter.cfg.tilt_time;
+        shutter.update(now).await;
+        assert_eq!(shutter.position.tilt, 0);
+        assert_eq!(shutter.position.height, 100);
+        info!("Should be tilted {:?}", shutter);
+
+        // Should reach height and switch to cooldown.
+        now += shutter.cfg.rise_time / 2;
+        shutter.update(now).await;
+        info!("Should be in the middle {:?}", shutter);
+        assert_eq!(shutter.action, Action::Cooldown(now));
+        assert!(channel.try_receive().is_ok());
+        assert!(channel.try_receive().is_ok());
+
+        now += COOLDOWN;
+        let time = shutter.update(now).await;
+        assert_eq!(time, Duration::from_millis(0));
+        assert_eq!(shutter.action, Action::Idle);
+        info!("Should be idle {:?}", shutter);
+
+        // Immediately after cooldown, should go down to close tilt.
+        let start_time = shutter.update(now).await;
+        assert_eq!(start_time, Duration::from_millis(0));
+        assert_eq!(shutter.action, Action::Down(now));
+        assert!(channel.try_receive().is_ok());
+        assert!(channel.try_receive().is_ok());
+
+        // Next update (same moment) has proper time.
+        let time = shutter.update(now).await;
+        assert_eq!(time, shutter.cfg.tilt_time / 2);
+
+        now += time;
+        let time = shutter.update(now).await;
+        assert!(channel.try_receive().is_ok());
+        assert!(channel.try_receive().is_ok());
+        assert_eq!(time, COOLDOWN);
+        assert_eq!(shutter.action, Action::Cooldown(now));
+        assert_eq!(shutter.position.tilt, 50);
+        assert_eq!(shutter.position.height, 50);
+
+        now += COOLDOWN;
+        shutter.update(now).await;
+        assert_eq!(shutter.action, Action::Idle);
+        assert!(channel.try_receive().is_err());
+
     }
 }
