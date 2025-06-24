@@ -27,7 +27,7 @@ bus-addr-11 = []
 [dependencies]
 # Basic set
 embassy-futures = { version = "0.1.1" }
-embassy-sync = { version = "0.6.1", features = ["defmt"] }
+embassy-sync = { version = "0.7.0", features = ["defmt"] }
 embassy-time = { version = "0.4.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
 embassy-stm32 = { version = "0.2.0", features = ["defmt", "time-driver-any", "unstable-pac", "time", "stm32g431cb"] }
 
@@ -38,28 +38,28 @@ embedded-io-async = { version = "0.6.1" }
 embedded-can = { version = "0.4.1" }
 embassy-embedded-hal = { version = "0.3.0" }
 
-embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "executor-thread", "defmt", "task-arena-size-8192"] }
+embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "executor-thread", "defmt"] }
 
 ector = { version = "0.7.0", default-features = false, features = ["time", "log" ] }
 heapless = { version = "0.8.0" }
 
 # Additional
 embassy-usb = { version = "0.4.0", features = ["defmt", "max-interface-count-3"] }
-static_cell = { version = "2.1.0" }
+static_cell = { version = "2.1.1" }
 
-defmt = "0.3.10"
+defmt = "1.0.1"
 rtt-target = { version = "0.6", features = ["defmt"] }
 
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7"
-panic-probe = { version = "0.3.2", features = ["print-rtt"] }
+panic-probe = { version = "1.0.0", features = ["print-rtt"] }
 futures = { version = "0.3.31", default-features = false, features = ["async-await"] }
 
 # Peripherals
 shared-bus = { version = "0.3.1", features = ["cortex-m"] }
 
 [dev-dependencies]
-embedded-test = { version = "0.6.0", features = ["embassy", "defmt"] }
+embedded-test = { version = "0.6.2", features = ["embassy", "defmt"] }
 
 [[test]]
 name = "main"
@@ -75,6 +75,8 @@ harness = false
 #embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "7703f47c1ecac029f603033b7977d9a2becef48c" }
 
 # Current local embassy version - that simplifies embassy development.
+# Embassy f09277b2a37cb77d3adf6675146c282fbcb9c955 worked with our ce7c39d339cf13feed0c4ec1ece9de3b0718121d (Jun 24)
+# Currently working with b5ab3276dce7322e33946e974770fa91b98124a4
 embassy-stm32 = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-stm32" }
 embassy-time = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-time" }
 embassy-futures = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-futures" }
@@ -82,9 +84,6 @@ embassy-sync = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-sync" }
 embassy-usb = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-usb" }
 embassy-executor = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-executor" }
 embassy-embedded-hal = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-embedded-hal" }
-
-# Tested first: b0da6318f3eaa4a7fa247834ae5d95887c5bcf18
-
 
 # cargo build/run --release
 [profile.release]

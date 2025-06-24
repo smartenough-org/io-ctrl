@@ -14,7 +14,7 @@ use defmt::info;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
 
-use embassy_stm32::gpio::{Level, Output, Pin, Speed};
+use embassy_stm32::gpio::{Level, Output, Speed};
 
 use crate::io::{
     events::InputChannel, events::IoIdx, expander_outputs, expander_switches,
@@ -37,7 +37,7 @@ bind_interrupts!(struct I2CIrqs {
     I2C3_ER => i2c::ErrorInterruptHandler<peripherals::I2C3>;
 });
 
-type AsyncI2C = I2c<'static, embassy_stm32::mode::Async>;
+type AsyncI2C = I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>;
 type SharedI2C = I2cDevice<'static, NoopRawMutex, AsyncI2C>;
 type ExpanderSwitches = expander_switches::ExpanderSwitches<SharedI2C>;
 type ExpanderOutputs = expander_outputs::ExpanderOutputs<SharedI2C>;
@@ -98,7 +98,7 @@ impl Board {
 
     pub fn assign_peripherals(p: embassy_stm32::Peripherals, spawner: &Spawner) -> Self {
         /* Basics */
-        let led = Output::new(p.PC6.degrade(), Level::Low, Speed::Low);
+        let led = Output::new(p.PC6, Level::Low, Speed::Low);
         let status = STATUS.init(Status::new(led));
 
         /* Initialize CAN */
@@ -157,7 +157,7 @@ impl Board {
 
         let usb_connect = usb_connect::UsbConnect::new(p.USB, p.PA12, p.PA11);
         let smngr = shutters::Manager::new(&OUTPUT_CHANNEL);
-        let shutters_channel: shutters::ShutterChannel = ector::actor!(spawner, shutters, shutters::Manager, smngr);
+        let shutters_channel: shutters::ShutterChannel = ector::actor!(spawner, shutters, shutters::Manager, smngr).into();
 
         info!("Board initialized");
         Self {
@@ -222,12 +222,13 @@ impl Board {
 
                 DateTime::from(
                     2025,
-                    1,
-                    1,
+                    1 /* month */,
+                    1 /* day */,
                     embassy_stm32::rtc::DayOfWeek::Wednesday,
-                    00,
-                    00,
-                    00,
+                    0 /* hour */,
+                    0 /* minute */,
+                    0 /* second */,
+                    0 /* usecond */,
                 )
                 .expect("This should work")
             }

@@ -2,10 +2,8 @@ use crate::components::message::MessageRaw;
 use crate::components::status;
 use crate::config::LOCAL_ADDRESS;
 use defmt::*;
-use embassy_stm32::can::frame::Envelope;
-use embassy_stm32::can::{self, BufferedCanSender};
+use embassy_stm32::can::{self, BufferedCanSender, BufferedCanReceiver};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::channel::DynamicReceiver;
 use embassy_sync::mutex::Mutex;
 use static_cell::StaticCell;
 
@@ -13,7 +11,7 @@ use super::message::Message;
 
 pub struct Interconnect {
     can_tx: Mutex<NoopRawMutex, BufferedCanSender>,
-    can_rx: DynamicReceiver<'static, Result<Envelope, embassy_stm32::can::enums::BusError>>,
+    can_rx: BufferedCanReceiver,
 }
 
 // NOTE: Use loopback for single-device tests.

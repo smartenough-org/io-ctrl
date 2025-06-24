@@ -1,4 +1,3 @@
-use ector::mutex::NoopRawMutex;
 /*
  * Requirements / use cases:
  * - Estimate position and track synchronization status.
@@ -7,7 +6,6 @@ use ector::mutex::NoopRawMutex;
  */
 use ector;
 use embassy_futures::select::{select, Either};
-use embassy_sync::channel::Sender;
 use embassy_time::{Duration, Instant, Timer};
 
 use crate::boards::{IOCommand, OutputChannel};
@@ -547,7 +545,7 @@ impl Manager {
     }
 }
 
-pub type ShutterChannel = Sender<'static, NoopRawMutex, (ShutterIdx, Cmd), 1>;
+pub type ShutterChannel = ector::DynamicAddress<(ShutterIdx, Cmd)>;
 
 impl ector::Actor for Manager {
     type Message = (ShutterIdx, Cmd);

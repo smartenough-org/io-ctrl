@@ -1,6 +1,7 @@
 [toolchain]
 # channel = "nightly-2023-11-01"
-channel = "1.83"
+# channel = "1.83" # Until Jun 24
+channel = "1.85"
 components = [ "rust-src", "rustfmt", "llvm-tools", "rust-analyzer" ]
 targets = [
     "thumbv7em-none-eabi",

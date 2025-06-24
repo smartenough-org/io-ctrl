@@ -249,7 +249,7 @@ pub async fn task_read_interconnect(board: &'static Board) {
                         continue;
                     }
                 };
-                let dt = DateTime::from(year, month, day, dow, hour, minute, second);
+                let dt = DateTime::from(year, month, day, dow, hour, minute, second, 0);
 
                 match dt {
                     Ok(dt) => {

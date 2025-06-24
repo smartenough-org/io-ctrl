@@ -2,6 +2,7 @@ use defmt::info;
 use embassy_futures::join::join;
 use embassy_futures::select::{select, Either};
 use embassy_stm32::peripherals::USB;
+use embassy_stm32::Peri;
 use embassy_stm32::peripherals::{PA11, PA12};
 use embassy_stm32::usb::Driver;
 use embassy_stm32::{bind_interrupts, peripherals, usb};
@@ -216,7 +217,7 @@ static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
 static STATE: StaticCell<State> = StaticCell::new();
 
 impl UsbConnect {
-    pub fn new(usb_peripheral: USB, dp: PA12, dm: PA11) -> Self {
+    pub fn new(usb_peripheral: Peri<'static, USB>, dp: Peri<'static, PA12>, dm: Peri<'static, PA11>) -> Self {
         // TODO: Maybe pull dp down for reenumeration on flash?
 
         // TODO: Do vbus detection configuration.
