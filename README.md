@@ -9,7 +9,7 @@ state of relays (lights or other things).
 - Read inputs via PCF IO expander.
 - Controls outputs via PCF IO expander.
 - Default configuration assumes 16 switch inputs, 16 outputs, 16 sensor inputs
-  (alarm, windows, etc.)
+  (alarm, windows, etc.) per board.
 - Tested on STM32G431. Default board assumes minimal soldering skills and reuses
   ready and cheap modules that are available to buy.
 - Assumes generic twisted pair cable and connectors

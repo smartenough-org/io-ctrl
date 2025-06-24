@@ -27,7 +27,7 @@ pub struct CtrlApp {
 impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
         // TODO: Pass interconnect? Or a queue?
-        let mut executor = Executor::new(board.io_command_q, &board.interconnect);
+        let mut executor = Executor::new(board.io_command_q, &board.interconnect, &board.shutters_channel);
         Self::configure(&mut executor).await;
 
         Self {
@@ -36,7 +36,8 @@ impl CtrlApp {
         }
     }
 
-    /// Returns hard-configured Executor. TODO: This is temporary.
+    /// Returns hard-configured Executor. TODO: This is temporary. Code should
+    /// be programmable and read from flash on start.
     async fn configure(executor: &mut Executor<BINDINGS_COUNT>) {
         let program = [
             // Setup proc.
@@ -59,6 +60,10 @@ impl CtrlApp {
             Opcode::BindShortToggle(14, 14),
             Opcode::BindShortToggle(15, 15),
             Opcode::BindShortToggle(16, 16),
+            // Configure shutter down/up. Don't use unconfigured shutters.
+            Opcode::BindShutter(0, 13, 14),
+            Opcode::BindShutter(1, 15, 16),
+
             // Opcode::BindLongActivate(1, 2),
             Opcode::Stop,
             /*

@@ -7,8 +7,11 @@ use super::bindings::*;
 use super::consts::{
     Command, Event, EventChannel, InIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS,
 };
-use super::layers::Layers;
-use super::opcodes::Opcode;
+use super::{
+    layers::Layers,
+    opcodes::Opcode,
+    shutters
+};
 use crate::boards::{IOCommand, OutputChannel};
 use crate::components::status;
 use crate::components::{
@@ -47,6 +50,7 @@ pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
     // Our outputs
     output_channel: &'static OutputChannel,
     interconnect: &'static Interconnect,
+    shutters: &'static shutters::ShutterChannel,
 }
 
 enum MicroState {
@@ -61,7 +65,8 @@ enum MicroState {
 }
 
 impl<const BN: usize> Executor<BN> {
-    pub fn new(queue: &'static OutputChannel, interconnect: &'static Interconnect) -> Self {
+    pub fn new(queue: &'static OutputChannel, interconnect: &'static Interconnect,
+               shutters_addr: &'static shutters::ShutterChannel) -> Self {
         Self {
             layers: Layers::new(),
             bindings: BindingList::new(),
@@ -70,6 +75,7 @@ impl<const BN: usize> Executor<BN> {
             state: BoardState::default(),
             output_channel: queue,
             interconnect,
+            shutters: shutters_addr,
         }
     }
 
@@ -92,7 +98,7 @@ impl<const BN: usize> Executor<BN> {
         // happen downstream (eg. infinitely awaiting on PCF)
         if self.output_channel.try_send(command.clone()).is_err() {
             defmt::warn!("Output channel is full! Hanging.");
-            status::COUNTERS.input_queue_full.inc();
+            status::COUNTERS.output_queue_full.inc();
             self.output_channel.send(command.clone()).await;
         }
 
@@ -274,7 +280,12 @@ impl<const BN: usize> Executor<BN> {
 
                 // NOTE: Layer deactivation is handled automatically and should
                 // not be bound.
-            } // Hypothetical?
+            }
+            Opcode::BindShutter(shutter_idx, down_idx, up_idx) => {
+                self.shutters.send((shutter_idx, shutters::Cmd::SetIO(down_idx, up_idx))).await;
+            }
+
+            // Hypothetical?
               // Read input value (local) into register
               /*
                   Opcode::ReadInput(switch_id) => {
@@ -377,6 +388,9 @@ impl<const BN: usize> Executor<BN> {
                             Command::DeactivateOutput(out) => {
                                 self.emit(IOCommand::DeactivateOutput(out)).await;
                             }
+                            Command::Shutter(shutter_idx, cmd) => {
+                                self.shutters.send((shutter_idx, cmd)).await;
+                            },
                         },
                         Action::Proc(proc_idx) => {
                             self.execute(proc_idx).await;

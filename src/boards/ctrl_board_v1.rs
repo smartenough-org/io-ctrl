@@ -3,6 +3,7 @@
 /// initialized once and available through the lifetime of a program.
 ///
 use crate::boards::{common, io_router};
+use crate::buttonsmash::shutters;
 use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_stm32::rtc::{DateTime, Rtc, RtcConfig, RtcError};
@@ -83,18 +84,19 @@ pub struct Board {
 
     /// On board RTC.
     pub rtc: Mutex<NoopRawMutex, Rtc>,
+    pub shutters_channel: shutters::ShutterChannel,
 }
 
 impl Board {
-    pub fn init() -> Self {
+    pub fn init(spawner: &Spawner) -> Self {
         let config = common::config_stm32g4();
         let peripherals = embassy_stm32::init(config);
 
         common::ensure_boot0_configuration();
-        Self::assign_peripherals(peripherals)
+        Self::assign_peripherals(peripherals, spawner)
     }
 
-    pub fn assign_peripherals(p: embassy_stm32::Peripherals) -> Self {
+    pub fn assign_peripherals(p: embassy_stm32::Peripherals, spawner: &Spawner) -> Self {
         /* Basics */
         let led = Output::new(p.PC6.degrade(), Level::Low, Speed::Low);
         let status = STATUS.init(Status::new(led));
@@ -154,6 +156,8 @@ impl Board {
         let rtc = Rtc::new(p.RTC, RtcConfig::default());
 
         let usb_connect = usb_connect::UsbConnect::new(p.USB, p.PA12, p.PA11);
+        let smngr = shutters::Manager::new(&OUTPUT_CHANNEL);
+        let shutters_channel: shutters::ShutterChannel = ector::actor!(spawner, shutters, shutters::Manager, smngr);
 
         info!("Board initialized");
         Self {
@@ -167,6 +171,7 @@ impl Board {
             rtc: Mutex::new(rtc),
             input_q: &INPUT_CHANNEL,
             io_command_q: &OUTPUT_CHANNEL,
+            shutters_channel,
         }
     }
 

@@ -1,3 +1,4 @@
+use ector::mutex::NoopRawMutex;
 /*
  * Requirements / use cases:
  * - Estimate position and track synchronization status.
@@ -6,6 +7,7 @@
  */
 use ector;
 use embassy_futures::select::{select, Either};
+use embassy_sync::channel::Sender;
 use embassy_time::{Duration, Instant, Timer};
 
 use crate::boards::{IOCommand, OutputChannel};
@@ -13,7 +15,7 @@ use crate::buttonsmash::consts::{OutIdx, ShutterIdx};
 use crate::config::MAX_SHUTTERS;
 
 use defmt::Format;
-use defmt::{info, error};
+use defmt::info;
 
 // TODO: Maybe that should be time hysteresis for both cases?
 /// Accuracy of position that's considered good enough. In percentage points.
@@ -23,11 +25,11 @@ const HYSTERESIS_TILT: u8 = 15;
 /// Time after movement stops before we can start another one.
 const COOLDOWN: Duration = Duration::from_millis(500);
 /// When in motion, how often should we report position change.
-const UPDATE_PERIOD: u32 = 1000;
+const UPDATE_PERIOD: Duration = Duration::from_millis(1000);
 
 /// Internal commands handled by a shutter driver.
-#[derive(Format)]
-enum Cmd {
+#[derive(Format, PartialEq, Eq, Clone, Copy, Debug)]
+pub enum Cmd {
     /// Full analog control: change height and tilt to given values 0-100.
     /// This is a two-step operation: ride + tilt.
     Go(Position),
@@ -49,11 +51,14 @@ enum Cmd {
     TiltHalf,
     /// Open if not completely open; otherwise - close.
     TiltReverse,
+
+    // Shutters are configured with commands.
+    SetIO(/* down */OutIdx, /* up */OutIdx),
 }
 
 /// Current or planned shutter position.
-#[derive(Format, Debug, Clone, Eq, PartialEq)]
-struct Position {
+#[derive(Format, Debug, Clone, Copy, Eq, PartialEq)]
+pub struct Position {
     // TODO: Height/Tilt should be an Enum - Known / Guessed. To mark when the position is not synchronized.
     /// Position of shutters. 0 (open) - 100% (closed)
     height: u8,
@@ -509,43 +514,69 @@ impl<'a> Shutter<'a> {
                     tilt,
                 }
             }
+            Cmd::SetIO(down_idx, up_idx) => {
+                assert_eq!(self.action, Action::Idle);
+                self.cfg.down = down_idx;
+                self.cfg.up = up_idx;
+                return;
+            }
         };
         self.set_target(now, target).await;
     }
 }
 
-struct Manager<'a> {
-    output_channel: &'a OutputChannel,
-    shutters: [Shutter<'a>; MAX_SHUTTERS],
+pub struct Manager {
+    shutters: [Shutter<'static>; MAX_SHUTTERS],
 }
 
-impl<'a> Manager<'a> {
-    async fn command(&mut self, cmd: Cmd, shutter: ShutterIdx) {
-        // New command invalidates the previous ones.
-        let now = Instant::now();
-
-        self.shutters[shutter as usize].command(cmd, now).await;
+impl Manager {
+    pub fn new(output_channel: &'static OutputChannel) -> Self {
+        Self {
+            shutters: [
+                // Shutters start unconfigured, and can later be set dynamically with commands.
+                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
+                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
+                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
+                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
+                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
+                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
+                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
+                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
+            ]
+        }
     }
 }
 
-impl ector::Actor for Manager<'static> {
-    type Message = (Cmd, ShutterIdx);
+pub type ShutterChannel = Sender<'static, NoopRawMutex, (ShutterIdx, Cmd), 1>;
+
+impl ector::Actor for Manager {
+    type Message = (ShutterIdx, Cmd);
 
     async fn on_mount<M>(&mut self, _: ector::DynamicAddress<Self::Message>, mut inbox: M) -> !
     where
         M: ector::Inbox<Self::Message>,
     {
-        let schedules: heapless::Vec<Instant, 8> = heapless::Vec::new();
-
         loop {
+            let now = Instant::now();
+            let mut min_duration = UPDATE_PERIOD.clone();
+            for shutter in self.shutters.iter_mut() {
+                let duration = shutter.update(now).await;
+                if duration < min_duration {
+                    min_duration = duration;
+                }
+            }
+            defmt::info!("Will wait for {:?}", min_duration);
             let inbox_future = inbox.next();
-            let max_time_future = Timer::after(Duration::from_millis(20));
+            let max_time_future = Timer::after(min_duration);
+            // TODO scan all and Determine earliest time of action.
             match select(inbox_future, max_time_future).await {
-                Either::First((cmd, shutter_idx)) => {
-                    defmt::info!("Shutter: {:?} {:?}", cmd, shutter_idx);
+                Either::First((shutter_idx, cmd)) => {
+                    defmt::info!("Shutter: cmd={:?} idx={:?}", cmd, shutter_idx);
+                    let shutter = &mut self.shutters[shutter_idx as usize];
+                    shutter.command(cmd, now).await;
                 }
                 Either::Second(()) => {
-                    // TODO Something needs disabling
+                    // Some timeout. Will rescan.
                 }
             }
         }

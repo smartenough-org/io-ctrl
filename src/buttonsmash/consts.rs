@@ -2,7 +2,7 @@ use defmt::Format;
 
 use crate::io::events::{ButtonEvent, Trigger};
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
-
+use super::shutters;
 /*
  * Shared, common constants and trivial structures
  */
@@ -10,9 +10,9 @@ use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
 // Input IO index. `0` is reserved to simplify things.
 pub type InIdx = u8;
 pub type OutIdx = u8;
+pub type ShutterIdx = u8;
 pub type LayerIdx = u8;
 pub type ProcIdx = u8;
-pub type ShutterIdx = u8;
 pub const MAX_PROCEDURES: usize = 128;
 pub const REGISTERS: usize = 32;
 pub const MAX_LAYERS: usize = 128;
@@ -41,6 +41,10 @@ pub enum Command {
     ActivateLayer(LayerIdx),
     /// Deactivate layer (public message)
     DeactivateLayer(LayerIdx),
+
+    /// Shutter command
+    Shutter(ShutterIdx, shutters::Cmd),
+
     /// No operation
     Noop,
 }

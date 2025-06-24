@@ -1,4 +1,4 @@
-use super::consts::{InIdx, LayerIdx, OutIdx, ProcIdx};
+use super::consts::{InIdx, LayerIdx, OutIdx, ProcIdx, ShutterIdx};
 
 /// Opcodes of the internal micro vm.
 /// Keep opcode argument length < 6B so it can be send completely
@@ -69,6 +69,17 @@ pub enum Opcode {
 
     /// Bind layer to activate/deactivate triggers.
     BindLayerHold(InIdx, LayerIdx),
+    /*
+     * Native Shutter support. UP/DOWN control
+     */
+    /// Configure new shutter.
+    /// - ID
+    /// - DOWN/UP outputs
+    /// - rise/fall total times, (maybe as x*10ms? u16 would allow for a 10min. time)
+    /// - DOWN/UP min switch time,
+    /// - from close to open on UP time,
+    BindShutter(ShutterIdx, OutIdx, OutIdx), // Shutter ID, outputs: DOWN, UP.
+
     // Hypothetical?
     /*
     /// Read input value (local) into register

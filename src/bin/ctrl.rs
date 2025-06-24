@@ -29,7 +29,7 @@ pub async fn main(spawner: Spawner) {
     defmt::info!("Preinit");
 
     // Create board peripherals (early init)
-    let board = BOARD.init(ctrl_board::Board::init());
+    let board = BOARD.init(ctrl_board::Board::init(&spawner));
 
     defmt::info!("Starting board");
 
