@@ -89,14 +89,14 @@ pub mod args {
             self as u8
         }
 
-        pub fn from_u8(raw: u8) -> Result<Self, ()> {
+        pub fn from_u8(raw: u8) -> Option<Self> {
             match raw {
-                0 => Ok(Self::Off),
-                1 => Ok(Self::On),
-                2 => Ok(Self::Toggle),
+                0 => Some(Self::Off),
+                1 => Some(Self::On),
+                2 => Some(Self::Toggle),
                 _ => {
                     defmt::warn!("OutputState parsed from invalid arg {}", raw);
-                    Err(())
+                    None
                 }
             }
         }
@@ -107,15 +107,15 @@ pub mod args {
             self as u8
         }
 
-        pub fn from_u8(raw: u8) -> Result<Self, ()> {
+        pub fn from_u8(raw: u8) -> Option<Self> {
             match raw {
-                0 => Ok(Trigger::ShortClick),
-                1 => Ok(Trigger::LongClick),
-                2 => Ok(Trigger::Activated),
-                3 => Ok(Trigger::Deactivated),
-                4 => Ok(Trigger::LongActivated),
-                5 => Ok(Trigger::LongDeactivated),
-                _ => Err(()),
+                0 => Some(Trigger::ShortClick),
+                1 => Some(Trigger::LongClick),
+                2 => Some(Trigger::Activated),
+                3 => Some(Trigger::Deactivated),
+                4 => Some(Trigger::LongActivated),
+                5 => Some(Trigger::LongDeactivated),
+                _ => None
             }
         }
     }
@@ -136,7 +136,7 @@ pub enum Message {
         state: args::OutputState,
     },
 
-    /// My output was changed.
+    /// My input was changed.
     InputTriggered { input: InIdx },
 
     /// Request output change.
@@ -146,6 +146,7 @@ pub enum Message {
         state: args::OutputState,
     },
 
+    // Behave as if input was triggered
     TriggerInput {
         input: InIdx,
         trigger: args::Trigger,
@@ -204,19 +205,6 @@ pub enum Message {
      */
 }
 
-/// Holds decoded message with additional metadata.
-/*
-Is it useful?
-pub struct Envelope {
-    // 5 bits
-    raw_type: u8,
-    // 6 bits
-    addr: u8,
-    // Decoded message
-    message: Message,
-}
-*/
-
 /// Raw message prepared for sending or just received.
 #[derive(defmt::Format, Default)]
 pub struct MessageRaw {
@@ -263,7 +251,7 @@ impl MessageRaw {
 
     /// Combine parts into 11-bit CAN address.
     pub fn to_can_addr(&self) -> u16 {
-        (self.msg_type as u16 & 0x1F) << 6 | (self.addr as u16 & 0x3F)
+        ((self.msg_type as u16 & 0x1F) << 6) | (self.addr as u16 & 0x3F)
     }
 
     /// Split/parse 11 bit CAN address into msg type and device address
@@ -287,16 +275,16 @@ impl MessageRaw {
 }
 
 impl Message {
-    pub fn from_raw(raw: &MessageRaw) -> Result<Self, ()> {
+    pub fn from_raw(raw: &MessageRaw) -> Option<Self> {
         match raw.msg_type {
             msg_type::SET_OUTPUT => {
                 if raw.length != 2 {
                     defmt::warn!("Set output has invalid message length {:?}", raw);
-                    return Err(());
+                    return None;
                 }
 
                 let state = args::OutputState::from_u8(raw.data[1])?;
-                Ok(Message::SetOutput {
+                Some(Message::SetOutput {
                     output: raw.data[0],
                     state,
                 })
@@ -304,11 +292,11 @@ impl Message {
             msg_type::TRIGGER_INPUT => {
                 if raw.length != 2 {
                     defmt::warn!("Trigger input has an invalid message length {:?}", raw);
-                    return Err(());
+                    return None;
                 }
 
                 let trigger = args::Trigger::from_u8(raw.data[1])?;
-                Ok(Message::TriggerInput {
+                Some(Message::TriggerInput {
                     input: raw.data[0],
                     trigger,
                 })
@@ -316,17 +304,17 @@ impl Message {
             msg_type::CALL_PROC => {
                 if raw.length != 1 {
                     defmt::warn!("Call proc has invalid message length {:?}", raw);
-                    return Err(());
+                    return None;
                 }
                 let proc_id: ProcIdx = raw.data[0];
-                Ok(Message::CallProcedure { proc_id })
+                Some(Message::CallProcedure { proc_id })
             }
             msg_type::TIME_ANNOUNCEMENT => {
                 if raw.length != 2 + 1 + 1 + 1 + 1 + 1 + 1 {
                     defmt::warn!("Time announcement has invalid message length {:?}", raw);
-                    return Err(());
+                    return None;
                 }
-                Ok(Message::TimeAnnouncement {
+                Some(Message::TimeAnnouncement {
                     year: u16::from_le_bytes([raw.data[0], raw.data[1]]),
                     month: raw.data[2],
                     day: raw.data[3],
@@ -337,30 +325,30 @@ impl Message {
                 })
             }
 
-            msg_type::REQUEST_STATUS => Ok(Message::RequestStatus),
+            msg_type::REQUEST_STATUS => Some(Message::RequestStatus),
 
-            msg_type::PING => Ok(Message::Ping {
+            msg_type::PING => Some(Message::Ping {
                 body: u16::from_le_bytes([raw.data[0], raw.data[1]]),
             }),
 
-            msg_type::PONG => Ok(Message::Pong {
+            msg_type::PONG => Some(Message::Pong {
                 body: u16::from_le_bytes([raw.data[0], raw.data[1]]),
             }),
 
             msg_type::INFO | msg_type::ERROR | msg_type::STATUS => {
                 defmt::info!("Ignoring info/error/status message: {:?}", raw);
-                Err(())
+                None
             }
 
             msg_type::OUTPUT_CHANGED | msg_type::INPUT_TRIGGERED => {
                 defmt::info!("Ignoring output/input change message {:?}", raw);
-                Err(())
+                None
             }
 
             _ => {
                 // TBH, probably safe to ignore.
                 defmt::warn!("Unable to parse unhandled message type {:?}", raw);
-                Err(())
+                None
             }
         }
     }
@@ -401,6 +389,11 @@ impl Message {
                 raw.length = 1;
                 raw.data[0] = *input; // ? More?
             }
+            Message::CallProcedure { proc_id } => {
+                raw.msg_type = msg_type::CALL_PROC;
+                raw.length = 1;
+                raw.data[0] = *proc_id;
+            }
             Message::Status {
                 uptime,
                 inputs,
@@ -421,11 +414,6 @@ impl Message {
                 raw.msg_type = msg_type::PONG;
                 raw.length = 2;
                 raw.data[0..2].copy_from_slice(&body.to_le_bytes());
-            }
-            Message::CallProcedure { proc_id } => {
-                raw.msg_type = msg_type::CALL_PROC;
-                raw.length = 1;
-                raw.data[0] = *proc_id;
             }
             /* we only parse those.
             Message::TimeAnnouncement { year, month, day, hour, minute, second } => todo!(),

@@ -27,9 +27,10 @@ const UPDATE_PERIOD: Duration = Duration::from_millis(1000);
 
 /// Internal commands handled by a shutter driver.
 #[derive(Format, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(u8)]
 pub enum Cmd {
     /// Full analog control: change height and tilt to given values 0-100.
-    /// This is a two-step operation: ride + tilt.
+    /// This is a two-step operation: ride (rise or drop) + tilt.
     Go(Position),
 
     /// Uncover/open completely. Tilt time + rise time + over_time up.
@@ -43,14 +44,14 @@ pub enum Cmd {
     // Tilt helpers.
     /// Tilt(100) - completely closed.
     TiltClose,
-    // Tilt(0) - completely open.
+    /// Tilt(0) - completely open.
     TiltOpen,
-    // 45 deg.
+    /// 45 deg.
     TiltHalf,
     /// Open if not completely open; otherwise - close.
     TiltReverse,
 
-    // Shutters are configured with commands.
+    /// Shutters are configured with commands.
     SetIO(/* down */OutIdx, /* up */OutIdx),
 }
 

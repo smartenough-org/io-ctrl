@@ -1,4 +1,4 @@
-/** Constants configuring the crate */
+/* Constants configuring the crate */
 
 /* NOTE: This could be generics maybe, but maybe const is good enough. */
 // pub const MAX_ACTIONS: usize = 32;

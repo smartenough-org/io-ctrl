@@ -161,7 +161,7 @@ pub async fn task_read_interconnect(board: &'static Board) {
         };
 
         // Semantic message parsing.
-        let message = if let Ok(message) = Message::from_raw(&raw) {
+        let message = if let Some(message) = Message::from_raw(&raw) {
             message
         } else {
             defmt::warn!("Error while reading a message {:?}", raw);

@@ -70,14 +70,16 @@ impl CommPacket {
             count: data.len() as u8,
             data: [0; MAX_PACKET_SIZE],
         };
-        p.data[..data.len()].copy_from_slice(&data[..]);
+        p.data[..data.len()].copy_from_slice(data);
         p
     }
 
     /// Serialize raw message into CommPacket
     pub fn from_raw_message(raw: &MessageRaw) -> Self {
-        let mut buf = Self::default();
-        buf.count = 1 + 1 + 1 + 8;
+        let mut buf = Self {
+            count: 1 + 1 + 1 + 8,
+            ..Self::default()
+        };
         (buf.data[0], buf.data[1]) = raw.addr_type();
         buf.data[2] = raw.length();
         buf.data[3..3 + raw.length() as usize].copy_from_slice(raw.data_as_slice());
@@ -169,7 +171,7 @@ impl CommProtocol {
                         Ok(bytes) => {
                             defmt::info!("USB RX: {} {:?}", bytes, &usb_buf[0..bytes]);
                             if let Some(msg) = CommPacket::deserialize_from(&usb_buf[0..bytes]) {
-                                if self.usb_down.len() >= 1 {
+                                if !self.usb_down.is_empty() {
                                     defmt::warn!(
                                         "Non-empty queue (len={}) when sending msg from USB.",
                                         self.usb_down.len()
