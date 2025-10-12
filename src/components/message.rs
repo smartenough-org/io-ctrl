@@ -1,6 +1,9 @@
 use embassy_stm32::can;
 
-use crate::buttonsmash::consts::{InIdx, OutIdx, ProcIdx};
+use crate::buttonsmash::{
+    shutters,
+    consts::{InIdx, OutIdx, ProcIdx, ShutterIdx}
+};
 
 /* Generic CAN has 11-bit addresses.
  * - Messages must be unique
@@ -34,6 +37,9 @@ mod msg_type {
     pub const TRIGGER_INPUT: u8 = 0x09;
     /// Call a predefined procedure in VM.
     pub const CALL_PROC: u8 = 0x0A;
+    /// Extended set (shutters, etc)
+    pub const CALL_SHUTTER: u8 = 0x0B;
+
     /// `Ping` of sorts.
     pub const REQUEST_STATUS: u8 = 0x0D;
 
@@ -150,6 +156,11 @@ pub enum Message {
     TriggerInput {
         input: InIdx,
         trigger: args::Trigger,
+    },
+
+    ShutterCmd {
+        shutter_idx: ShutterIdx,
+        cmd: shutters::Cmd,
     },
 
     /// Better Ping. TODO: Handle RTR?
@@ -393,6 +404,12 @@ impl Message {
                 raw.msg_type = msg_type::CALL_PROC;
                 raw.length = 1;
                 raw.data[0] = *proc_id;
+            }
+            Message::ShutterCmd { shutter_idx, cmd } => {
+                raw.msg_type = msg_type::CALL_SHUTTER;
+                raw.length = 7;
+                raw.data[0] = *shutter_idx;
+                cmd.to_raw(&mut raw.data[1..6]);
             }
             Message::Status {
                 uptime,

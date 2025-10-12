@@ -273,6 +273,10 @@ pub async fn task_read_interconnect(board: &'static Board) {
                     }
                 }
             }
+            Message::ShutterCmd { shutter_idx, cmd } => {
+                defmt::warn!("Remote shutter cmd to {}: {:?}", shutter_idx, cmd);
+                board.shutters_channel.send((shutter_idx, cmd)).await;
+            }
 
             Message::RequestStatus => {
                 if !to_us {

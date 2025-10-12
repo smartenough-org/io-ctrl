@@ -53,6 +53,96 @@ pub enum Cmd {
 
     /// Shutters are configured with commands.
     SetIO(/* down */OutIdx, /* up */OutIdx),
+    // TODO SetRiseDropTime(u16, u16),
+    // TODO SetTiltOverTime(u16, u16),
+}
+
+mod codes {
+    pub const GO: u8 = 0x01;
+    pub const OPEN: u8 = 0x02;
+    pub const CLOSE: u8 = 0x03;
+    pub const TILT: u8 = 0x04;
+    pub const TILT_CLOSE: u8 = 0x05;
+    pub const TILT_OPEN: u8 = 0x06;
+    pub const TILT_HALF: u8 = 0x07;
+    pub const TILT_REVERSE: u8 = 0x08;
+    pub const SET_IO: u8 = 0x10;
+}
+
+impl Cmd {
+    pub fn from_raw(raw: &[u8; 5]) -> Option<Self> {
+        Some(match raw[0] {
+            codes::GO => {
+                Cmd::Go(Position::new(raw[1], raw[2]))
+            }
+            codes::OPEN => {
+                Cmd::Open
+            }
+            codes::CLOSE => {
+                Cmd::Close
+            }
+            codes::TILT => {
+                Cmd::Tilt(raw[1])
+            }
+            codes::TILT_CLOSE => {
+                Cmd::Close
+            }
+            codes::TILT_OPEN => {
+                Cmd::TiltOpen
+            }
+            codes::TILT_HALF => {
+                Cmd::TiltHalf
+            }
+            codes::TILT_REVERSE => {
+                Cmd::TiltReverse
+            }
+            codes::SET_IO => {
+                Cmd::SetIO(raw[1], raw[2])
+            }
+            _ => {
+                return None;
+            }
+        })
+    }
+
+    pub fn to_raw(&self, raw: &mut [u8]) {
+        raw.fill(0);
+        assert!(raw.len() >= 5);
+        match self {
+            Cmd::Go(position) => {
+                raw[0] = codes::GO;
+                raw[1] = position.height;
+                raw[2] = position.tilt;
+            },
+            Cmd::Open => {
+                raw[0] = codes::OPEN;
+            },
+            Cmd::Close => {
+                raw[0] = codes::CLOSE;
+            },
+            Cmd::Tilt(tilt) => {
+                raw[0] = codes::TILT;
+                raw[1] = *tilt;
+            },
+            Cmd::TiltClose => {
+                raw[0] = codes::TILT_CLOSE;
+            },
+            Cmd::TiltOpen => {
+                raw[0] = codes::TILT_OPEN;
+            },
+            Cmd::TiltHalf => {
+                raw[0] = codes::TILT_HALF;
+            },
+            Cmd::TiltReverse => {
+                raw[0] = codes::TILT_REVERSE;
+            },
+            Cmd::SetIO(down, up) => {
+                raw[0] = codes::SET_IO;
+                raw[1] = *down;
+                raw[2] = *up;
+            },
+        }
+    }
 }
 
 /// Current or planned shutter position.
@@ -146,16 +236,16 @@ impl Config {
             self.drop_time
         } else {
             self.rise_time
-        }.as_millis() as u64;
+        }.as_millis();
 
         let diff = from.abs_diff(to) as u64;
-        return Duration::from_millis(cost * diff / 100);
+        Duration::from_millis(cost * diff / 100)
     }
 
     /// Time it will take to tilt.
     fn tilt_as_time(&self, from: u8, to: u8) -> Duration {
         let change = from.abs_diff(to) as u64;
-        return Duration::from_millis(self.tilt_time.as_millis() * change / 100);
+        Duration::from_millis(self.tilt_time.as_millis() * change / 100)
     }
 
     /// How much tilted in given time.
@@ -233,7 +323,7 @@ impl<'a> Shutter<'a> {
 
         if elapsed >= max_time {
             // We reached the final tilt in max_time
-            return (max_tilt, elapsed - max_time);
+            (max_tilt, elapsed - max_time)
         } else {
             // We are within the tilt movement still.
 
@@ -241,9 +331,9 @@ impl<'a> Shutter<'a> {
             let consumed_time = self.cfg.tilt_as_time(0, tilted);
             assert!(tilted < 100); // from other limit
             let mut tilt = self.position.tilt as i32;
-            tilt += dir as i32 * self.cfg.time_as_tilt(elapsed) as i32;
-            assert!(tilt >= 0 && tilt <= 100);
-            return (tilt as u8, elapsed - consumed_time)
+            tilt += dir * self.cfg.time_as_tilt(elapsed) as i32;
+            assert!((0..=100).contains(&tilt));
+            (tilt as u8, elapsed - consumed_time)
         }
     }
 
@@ -338,13 +428,13 @@ impl<'a> Shutter<'a> {
                         self.action = Action::Up(now);
                         self.go_up().await;
                         // Return 0 to we got called again shortly and calculate proper time.
-                        return Duration::from_secs(0);
+                        Duration::from_secs(0)
                     } else {
                         // We should move down.
                         info!("INIT: Idle -> Down (Height)");
                         self.action = Action::Down(now);
                         self.go_down().await;
-                        return Duration::from_secs(0);
+                        Duration::from_secs(0)
                     }
                 } else if tilt_diff > HYSTERESIS_TILT {
                     if self.target.tilt < self.position.tilt {
@@ -352,18 +442,18 @@ impl<'a> Shutter<'a> {
                         info!("INIT: Idle -> Up (Tilt)");
                         self.action = Action::Up(now);
                         self.go_up().await;
-                        return Duration::from_secs(0);
+                        Duration::from_secs(0)
                     } else {
                         // Tilt is too low (we are too open), move down a bit.
                         info!("INIT: Idle -> Down (Tilt)");
                         self.action = Action::Down(now);
                         self.go_down().await;
-                        return Duration::from_secs(0);
+                        Duration::from_secs(0)
                     }
                 } else {
                     // Nothing is happening.
                     info!("Idle -> Idle (10s)");
-                    return Duration::from_secs(10);
+                    Duration::from_secs(10)
                 }
             }
             Action::Cooldown(since) => {
@@ -371,10 +461,10 @@ impl<'a> Shutter<'a> {
                 if elapsed >= COOLDOWN {
                     self.action = Action::Idle;
                     // We are inactive now and new action can be started.
-                    return Duration::from_secs(0);
+                    Duration::from_secs(0)
                 } else {
                     // Wait until the cooldown ends
-                    return COOLDOWN - elapsed;
+                    COOLDOWN - elapsed
                 }
             }
             Action::Up(_) => {
@@ -385,14 +475,14 @@ impl<'a> Shutter<'a> {
                         // Tilt achieved! Stop movement.
                         self.go_idle().await;
                         self.action = Action::Cooldown(now);
-                        return COOLDOWN;
+                        COOLDOWN
                     } else {
                         // We're still in motion until the tilt is fine.
-                        return self.cfg.tilt_as_time(self.position.tilt, self.target.tilt);
+                        self.cfg.tilt_as_time(self.position.tilt, self.target.tilt)
                     }
                 } else {
                     // The movement should continue.
-                    return self.cfg.travel_as_time(self.position.height, self.target.height)
+                    self.cfg.travel_as_time(self.position.height, self.target.height)
                 }
             }
             Action::Down(_) => {
@@ -403,14 +493,14 @@ impl<'a> Shutter<'a> {
                         // Tilt achieved! Stop movement.
                         self.go_idle().await;
                         self.action = Action::Cooldown(now);
-                        return COOLDOWN;
+                        COOLDOWN
                     } else {
                         // We're still in motion until the tilt is fine.
-                        return self.cfg.tilt_as_time(self.position.tilt, self.target.tilt);
+                        self.cfg.tilt_as_time(self.position.tilt, self.target.tilt)
                     }
                 } else {
                     // The movement should continue.
-                    return self.cfg.travel_as_time(self.position.height, self.target.height)
+                    self.cfg.travel_as_time(self.position.height, self.target.height)
                 }
             }
         }
@@ -533,14 +623,14 @@ impl Manager {
         Self {
             shutters: [
                 // Shutters start unconfigured, and can later be set dynamically with commands.
-                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
-                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
-                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
-                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
-                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
-                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
-                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
-                Shutter::new(OutIdx::max_value(), OutIdx::max_value(), output_channel),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
             ]
         }
     }
@@ -557,7 +647,7 @@ impl ector::Actor for Manager {
     {
         loop {
             let now = Instant::now();
-            let mut min_duration = UPDATE_PERIOD.clone();
+            let mut min_duration = UPDATE_PERIOD;
             for shutter in self.shutters.iter_mut() {
                 let duration = shutter.update(now).await;
                 if duration < min_duration {
