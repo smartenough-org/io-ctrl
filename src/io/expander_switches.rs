@@ -108,37 +108,42 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                 continue;
             };
 
-            for idx in 0..16 {
+            for (idx, entry) in state.iter_mut().enumerate() {
                 let value = (bytes & (1 << idx)) != 0;
 
                 if value == ACTIVE_LEVEL {
                     /* Switch is pressed (or maybe noise/contact bouncing) */
-                    state[idx] = state[idx].saturating_add(1);
+                    *entry = entry.saturating_add(1);
 
-                    if state[idx] == MIN_TIME {
-                        /* Just activated */
-                        defmt::info!("ACTIVATED {}", idx);
-                        self.transmit(events::SwitchEvent {
-                            switch_id: self.io_indices[idx],
-                            state: events::SwitchState::Activated,
-                        })
-                        .await;
-                    } else if state[idx] > MIN_TIME {
-                        /* Was activated and still is active */
-                        let time_active = LOOP_WAIT_MS * (state[idx] as u32);
-                        self.transmit(events::SwitchEvent {
-                            switch_id: self.io_indices[idx],
-                            state: events::SwitchState::Active(time_active),
-                        })
-                        .await;
-                    } else {
-                        /* Not yet active */
-                        defmt::info!("active level state idx={} state={}", idx, state[idx]);
+                    match (*entry).cmp(&MIN_TIME) {
+                        core::cmp::Ordering::Equal => {
+                            /* Just activated */
+                            defmt::info!("ACTIVATED {}", idx);
+                            self.transmit(events::SwitchEvent {
+                                switch_id: self.io_indices[idx],
+                                state: events::SwitchState::Activated,
+                            })
+                                .await;
+
+                        }
+                        core::cmp::Ordering::Greater => {
+                            /* Was activated and still is active */
+                            let time_active = LOOP_WAIT_MS * (*entry as u32);
+                            self.transmit(events::SwitchEvent {
+                                switch_id: self.io_indices[idx],
+                                state: events::SwitchState::Active(time_active),
+                            })
+                                .await;
+                        }
+                        _ => {
+                            /* Not yet active */
+                            defmt::info!("active level state idx={} state={}", idx, entry);
+                        }
                     }
                 } else {
-                    if state[idx] >= MIN_TIME {
+                    if *entry >= MIN_TIME {
                         /* Was active, now it just got deactivated */
-                        let time_active = LOOP_WAIT_MS * (state[idx] as u32);
+                        let time_active = LOOP_WAIT_MS * (*entry as u32);
                         defmt::info!("DEACTIVATED {} after {}ms", idx, time_active);
                         self.transmit(events::SwitchEvent {
                             switch_id: self.io_indices[idx],
@@ -146,7 +151,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                         })
                         .await;
                     }
-                    state[idx] = 0;
+                    *entry = 0;
                     continue;
                 }
             }
