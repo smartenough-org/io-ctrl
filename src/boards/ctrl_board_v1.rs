@@ -17,7 +17,7 @@ use embassy_sync::mutex::Mutex;
 use embassy_stm32::gpio::{Level, Output, Speed};
 
 use crate::io::{
-    events::InputChannel, events::IoIdx, expander_outputs, expander_switches,
+    events::InputChannel, events::IoIdx, expander_outputs, expander_inputs,
     indexed_outputs::IndexedOutputs, pcf8575::Pcf8575,
 };
 
@@ -39,7 +39,7 @@ bind_interrupts!(struct I2CIrqs {
 
 type AsyncI2C = I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>;
 type SharedI2C = I2cDevice<'static, NoopRawMutex, AsyncI2C>;
-type ExpanderSwitches = expander_switches::ExpanderSwitches<SharedI2C>;
+type ExpanderInputs = expander_inputs::ExpanderInputs<SharedI2C>;
 type ExpanderOutputs = expander_outputs::ExpanderOutputs<SharedI2C>;
 
 static I2C_BUS: StaticCell<Mutex<NoopRawMutex, AsyncI2C>> = StaticCell::new();
@@ -64,7 +64,10 @@ pub struct Board {
     pub status: &'static Status,
 
     /// Handle physical switches - inputs.
-    pub expander_switches: ExpanderSwitches,
+    pub expander_switches: ExpanderInputs,
+
+    /// Handle physical sensors (window, door contactrons mostly) - inputs.
+    pub expander_sensors: ExpanderInputs,
 
     /// Queue of input events (from expanders, native IOs, etc.)
     pub input_q: &'static InputChannel,
@@ -72,7 +75,7 @@ pub struct Board {
 
     /// Physical outputs.
     indexed_outputs:
-        Mutex<NoopRawMutex, IndexedOutputs<18, 1, 2, ExpanderOutputs, Output<'static>>>,
+        Mutex<NoopRawMutex, IndexedOutputs<24, 1, 8, ExpanderOutputs, Output<'static>>>,
     /// CAN communication between the layers.
     pub interconnect: Interconnect,
 
@@ -121,38 +124,67 @@ impl Board {
         );
         let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
-        /* TODO: Assumption we have up to 3 expanders. One for outputs, second
-         * for inputs (light, switches), third one for sensors */
+        /* There can be multiple combinations of expanders. The base is pretty ubiquitous:
+         * - One for inputs.
+         * - One for controlled outputs.
+         *
+         * And then in one place I've got other box for sensors so I'd go for
+         * another outputs, but in most other places I'd need inputs
+         * (window/door sensors). Inputs are often longer lines without
+         * additional protection. Outputs are shorter, within the box and with
+         * some protection.
+         *
+         * For now I can go 1x outputs, 2x inputs. And use STM32 IOs for additional inputs.
+         *
+         * In future: We need I/O configurable by the VM.
+         */
         // Inputs - light switches.
         let io_ex_inputs = Pcf8575::new(I2cDevice::new(i2c_bus), true, true, true);
 
         // Inputs - sensors.
-        let _io_ex_sensors = Pcf8575::new(I2cDevice::new(i2c_bus), true, true, false);
+        let io_sensors = Pcf8575::new(I2cDevice::new(i2c_bus), true, true, false);
 
         // Outputs
         let io_ex_outputs = Pcf8575::new(I2cDevice::new(i2c_bus), false, false, false);
 
-        let expander_switches = ExpanderSwitches::new(
+        let expander_switches = ExpanderInputs::new(
             io_ex_inputs,
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
             &INPUT_CHANNEL,
             status,
+            true, /* required */
         );
 
-        let expander_outputs = ExpanderOutputs::new(io_ex_outputs);
+        let expander_sensors = ExpanderInputs::new(
+            io_sensors,
+            [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36],
+            &INPUT_CHANNEL,
+            status,
+            false, /* optional - at least for now */
+        );
+
+        let main_outputs = ExpanderOutputs::new(io_ex_outputs);
 
         let indexed_outputs = Mutex::new(IndexedOutputs::new(
-            [expander_outputs],
+            [main_outputs],
             [
                 // That's just example on how to add native IOs to outputs.
                 Output::new(p.PB3, Level::High, Speed::Low),
                 Output::new(p.PB4, Level::High, Speed::Low),
+                Output::new(p.PB6, Level::High, Speed::Low),
+                Output::new(p.PB7, Level::High, Speed::Low),
+                Output::new(p.PC4, Level::High, Speed::Low),
+                Output::new(p.PB12, Level::High, Speed::Low),
+                Output::new(p.PB15, Level::High, Speed::Low),
+                Output::new(p.PB11, Level::High, Speed::Low),
+
             ],
             // IDs for outputs in order, starting with expander outputs.
             [
-                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+                1,  2,  3,  4,  5,  6,  7,  8,
+                9, 10, 11, 12, 13, 14, 15, 16,
                 /* Native Pins start here */
-                17, 18,
+                51, 52, 53, 54, 55, 56, 57, 58,
             ],
         ));
 
@@ -165,6 +197,7 @@ impl Board {
         info!("Board initialized");
         Self {
             expander_switches,
+            expander_sensors,
             indexed_outputs,
             interconnect,
             status,
@@ -187,7 +220,8 @@ impl Board {
 
     /// Spawn tasks related to IO handling.
     pub fn spawn_io_tasks(&'static self, spawner: &Spawner) {
-        spawner.spawn(unwrap!(task_expander_switches(&self.expander_switches)));
+        spawner.spawn(unwrap!(task_expander_inputs(&self.expander_switches)));
+        spawner.spawn(unwrap!(task_expander_inputs(&self.expander_sensors)));
         spawner.spawn(unwrap!(io_router::task_io_router(self, self.io_command_q)));
     }
 
@@ -246,7 +280,7 @@ impl Board {
 }
 
 #[embassy_executor::task]
-pub async fn task_expander_switches(switches: &'static ExpanderSwitches) {
+pub async fn task_expander_inputs(switches: &'static ExpanderInputs) {
     switches.run().await;
 }
 

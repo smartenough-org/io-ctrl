@@ -9,7 +9,7 @@ use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c::I2c;
 
 /// Read inputs (switches) and generate events.
-pub struct ExpanderSwitches<BUS: I2c> {
+pub struct ExpanderInputs<BUS: I2c> {
     /// Indices of connected PINs
     io_indices: [IoIdx; 16],
 
@@ -22,15 +22,20 @@ pub struct ExpanderSwitches<BUS: I2c> {
     /// Internal error counter that will cause panic if unreachable for too long.
     errors: AtomicU16,
 
+    /// Notifing about problems with expander,
     status: &'static Status,
+
+    /// Is this expander required? Or it might be absent?
+    required: bool,
 }
 
-impl<BUS: I2c> ExpanderSwitches<BUS> {
+impl<BUS: I2c> ExpanderInputs<BUS> {
     pub fn new(
         expander: Pcf8575<BUS>,
         io_indices: [IoIdx; 16],
         queue: &'static InputChannel,
         status: &'static Status,
+        required: bool,
     ) -> Self {
         Self {
             io_indices,
@@ -38,6 +43,7 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
             queue,
             errors: AtomicU16::new(0),
             status,
+            required,
         }
     }
 
@@ -76,12 +82,14 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                 if expander.write(0xffff).await.is_ok() {
                     initialized = true;
                 } else {
-                    status::COUNTERS.expander_input_error.inc();
-                    self.status.is_warning();
-                    let errs = self.errors.fetch_add(1, Ordering::Relaxed);
-                    defmt::error!("Unable to configure expander. Errors={}", errs);
-                    if errs > 60 {
-                        defmt::panic!("Expander connection seems dead after {} errors", errs);
+                    if self.required {
+                        status::COUNTERS.expander_input_error.inc();
+                        self.status.is_warning();
+                        let errs = self.errors.fetch_add(1, Ordering::Relaxed);
+                        defmt::error!("Unable to configure expander. Errors={}", errs);
+                        if errs > 60 {
+                            defmt::panic!("Expander connection seems dead after {} errors", errs);
+                        }
                     }
                     Timer::after(Duration::from_millis(1000)).await;
                     continue;
@@ -99,11 +107,13 @@ impl<BUS: I2c> ExpanderSwitches<BUS> {
                 // Reading failed. If intermittent, we can accept it.
                 let errs = self.errors.load(Ordering::Relaxed) + 1;
                 self.errors.store(errs, Ordering::Relaxed);
-                status::COUNTERS.expander_input_error.inc();
-                self.status.is_warning();
-                defmt::error!("Unable to read expander. Errors={}", errs);
-                if errs > 60 {
-                    defmt::panic!("Expander connection seems dead after {} errors", errs);
+                if self.required {
+                    status::COUNTERS.expander_input_error.inc();
+                    self.status.is_warning();
+                    defmt::error!("Unable to read expander. Errors={}", errs);
+                    if errs > 60 {
+                        defmt::panic!("Expander connection seems dead after {} errors", errs);
+                    }
                 }
                 continue;
             };
