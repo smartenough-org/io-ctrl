@@ -6,7 +6,7 @@ use crate::boards::{common, io_router};
 use crate::buttonsmash::shutters;
 use defmt::unwrap;
 use embassy_executor::Spawner;
-use embassy_stm32::rtc::{DateTime, Rtc, RtcConfig, RtcError};
+use embassy_stm32::rtc::{DateTime, Rtc, RtcConfig, RtcTimeProvider, RtcError};
 
 use crate::components::{interconnect::Interconnect, status::Status, usb_connect};
 
@@ -83,6 +83,7 @@ pub struct Board {
 
     /// On board RTC.
     pub rtc: Mutex<NoopRawMutex, Rtc>,
+    pub time_provider: RtcTimeProvider,
     pub shutters_channel: shutters::ShutterChannel,
 }
 
@@ -155,7 +156,7 @@ impl Board {
             ],
         ));
 
-        let rtc = Rtc::new(p.RTC, RtcConfig::default());
+        let (rtc, time_provider) = Rtc::new(p.RTC, RtcConfig::default());
 
         let usb_connect = usb_connect::UsbConnect::new(p.USB, p.PA12, p.PA11);
         let smngr = shutters::Manager::new(&OUTPUT_CHANNEL);
@@ -171,6 +172,7 @@ impl Board {
             usb_up: &USB_UP,
             usb_down: &USB_DOWN,
             rtc: Mutex::new(rtc),
+            time_provider: time_provider,
             input_q: &INPUT_CHANNEL,
             io_command_q: &OUTPUT_CHANNEL,
             shutters_channel,
@@ -196,8 +198,7 @@ impl Board {
 
     /// Read time from RTC.
     pub async fn read_time(&self) -> DateTime {
-        let rtc = self.rtc.lock().await;
-        match rtc.now() {
+        match self.time_provider.now() {
             Ok(dt) => dt,
             Err(_rtc_err) => {
                 defmt::error!("Error while reading RTC.");

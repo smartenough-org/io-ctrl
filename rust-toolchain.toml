@@ -1,7 +1,7 @@
 [toolchain]
-channel = "nightly"
+#channel = "nightly"
 
-#channel = "1.90"
+channel = "1.92"
 components = [ "rust-src", "rustfmt", "llvm-tools", "rust-analyzer" ]
 targets = [
     "thumbv7em-none-eabi",

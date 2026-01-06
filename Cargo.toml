@@ -29,19 +29,19 @@ bus-addr-11 = []
 embassy-futures = { version = "0.1.2" }
 embassy-sync = { version = "0.7.2", features = ["defmt"] }
 embassy-time = { version = "0.5.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
-embassy-stm32 = { version = "0.4.0", features = ["defmt", "time-driver-any", "unstable-pac", "time", "stm32g431cb"] }
+embassy-stm32 = { version = "0.5.0", features = ["defmt", "time-driver-any", "unstable-pac", "time", "stm32g431cb"] }
 
 # Required if you want to store generic stuff in structs.
 embedded-hal-async = { version = "1.0.0" }
 embedded-hal = { version = "1.0.0" }
-embedded-io-async = { version = "0.6.1" }
+embedded-io-async = { version = "0.7.0" }
 embedded-can = { version = "0.4.1" }
 embassy-embedded-hal = { version = "0.5.0" }
 
 embassy-executor = { version = "0.9.1", features = ["arch-cortex-m", "executor-thread", "defmt"] }
 
 ector = { version = "0.8.0", default-features = false, features = ["time", "log" ] }
-heapless = { version = "0.9.1" }
+heapless = { version = "0.9.2" }
 
 # Additional
 embassy-usb = { version = "0.5.1", features = ["defmt", "max-interface-count-3"] }
@@ -59,7 +59,7 @@ futures = { version = "0.3.31", default-features = false, features = ["async-awa
 shared-bus = { version = "0.3.1", features = ["cortex-m"] }
 
 [dev-dependencies]
-embedded-test = { version = "0.6.2", features = ["embassy", "defmt"] }
+embedded-test = { version = "0.7.0", features = ["embassy", "defmt"] }
 
 [[test]]
 name = "main"
