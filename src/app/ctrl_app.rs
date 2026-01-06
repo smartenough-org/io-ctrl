@@ -93,9 +93,9 @@ impl CtrlApp {
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
         let executor = unsafe { &mut *self.executor.get() };
-        unwrap!(spawner.spawn(task_pump_switch_events_to_microvm(executor)));
-        unwrap!(spawner.spawn(run_event_converter(self.board.input_q, &EVENT_CHANNEL)));
-        unwrap!(spawner.spawn(task_read_interconnect(self.board)));
+        spawner.spawn(unwrap!(task_pump_switch_events_to_microvm(executor)));
+        spawner.spawn(unwrap!(run_event_converter(self.board.input_q, &EVENT_CHANNEL)));
+        spawner.spawn(unwrap!(task_read_interconnect(self.board)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {

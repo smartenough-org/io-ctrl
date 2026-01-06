@@ -21,8 +21,8 @@ impl GateApp {
     }
 
     fn spawn_tasks(&'static self, spawner: &Spawner) {
-        unwrap!(spawner.spawn(task_read_interconnect(self.board)));
-        unwrap!(spawner.spawn(task_read_usb(self.board)));
+        spawner.spawn(unwrap!(task_read_interconnect(self.board)));
+        spawner.spawn(unwrap!(task_read_usb(self.board)));
     }
 
     pub async fn main(&'static mut self, spawner: &Spawner) -> ! {

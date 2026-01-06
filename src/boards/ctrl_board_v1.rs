@@ -22,7 +22,7 @@ use crate::io::{
 };
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
-use embassy_stm32::i2c::I2c;
+use embassy_stm32::i2c::{I2c, Config};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, can, i2c, peripherals};
 use static_cell::StaticCell;
@@ -73,7 +73,6 @@ pub struct Board {
     /// Physical outputs.
     indexed_outputs:
         Mutex<NoopRawMutex, IndexedOutputs<18, 1, 2, ExpanderOutputs, Output<'static>>>,
-
     /// CAN communication between the layers.
     pub interconnect: Interconnect,
 
@@ -105,6 +104,9 @@ impl Board {
         let can = can::CanConfigurator::new(p.FDCAN1, p.PB8, p.PB9, CanIrqs);
         let interconnect = Interconnect::new(can);
 
+        let mut cfg: Config = Default::default();
+        cfg.frequency = Hertz(400_000);
+
         /* Initialize I²C and 16-bit port expanders */
         let i2c = I2c::new(
             p.I2C3,
@@ -113,8 +115,8 @@ impl Board {
             I2CIrqs,
             p.DMA1_CH6,
             p.DMA1_CH1,
-            Hertz(400_000),
-            Default::default(),
+            // Hertz(400_000),
+            cfg,
         );
         let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
@@ -177,14 +179,14 @@ impl Board {
 
     /// Spawn main common tasks.
     pub fn spawn_tasks(&'static self, spawner: &Spawner) {
-        unwrap!(spawner.spawn(task_status(self.status)));
-        unwrap!(spawner.spawn(task_usb_transceiver(self)));
+        spawner.spawn(unwrap!(task_status(self.status)));
+        spawner.spawn(unwrap!(task_usb_transceiver(self)));
     }
 
     /// Spawn tasks related to IO handling.
     pub fn spawn_io_tasks(&'static self, spawner: &Spawner) {
-        unwrap!(spawner.spawn(task_expander_switches(&self.expander_switches)));
-        unwrap!(spawner.spawn(io_router::task_io_router(self, self.io_command_q)));
+        spawner.spawn(unwrap!(task_expander_switches(&self.expander_switches)));
+        spawner.spawn(unwrap!(io_router::task_io_router(self, self.io_command_q)));
     }
 
     pub async fn set_output(&self, idx: IoIdx, state: bool) -> Result<(), ()> {

@@ -1,5 +1,5 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "io-ctrl"
 version = "0.1.0"
 license = "GPL-3.0-or-later"
@@ -26,25 +26,25 @@ bus-addr-11 = []
 
 [dependencies]
 # Basic set
-embassy-futures = { version = "0.1.1" }
-embassy-sync = { version = "0.7.0", features = ["defmt"] }
-embassy-time = { version = "0.4.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
-embassy-stm32 = { version = "0.2.0", features = ["defmt", "time-driver-any", "unstable-pac", "time", "stm32g431cb"] }
+embassy-futures = { version = "0.1.2" }
+embassy-sync = { version = "0.7.2", features = ["defmt"] }
+embassy-time = { version = "0.5.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-stm32 = { version = "0.4.0", features = ["defmt", "time-driver-any", "unstable-pac", "time", "stm32g431cb"] }
 
 # Required if you want to store generic stuff in structs.
 embedded-hal-async = { version = "1.0.0" }
 embedded-hal = { version = "1.0.0" }
 embedded-io-async = { version = "0.6.1" }
 embedded-can = { version = "0.4.1" }
-embassy-embedded-hal = { version = "0.3.0" }
+embassy-embedded-hal = { version = "0.5.0" }
 
-embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "executor-thread", "defmt"] }
+embassy-executor = { version = "0.9.1", features = ["arch-cortex-m", "executor-thread", "defmt"] }
 
-ector = { version = "0.7.0", default-features = false, features = ["time", "log" ] }
-heapless = { version = "0.8.0" }
+ector = { version = "0.8.0", default-features = false, features = ["time", "log" ] }
+heapless = { version = "0.9.1" }
 
 # Additional
-embassy-usb = { version = "0.4.0", features = ["defmt", "max-interface-count-3"] }
+embassy-usb = { version = "0.5.1", features = ["defmt", "max-interface-count-3"] }
 static_cell = { version = "2.1.1" }
 
 defmt = "1.0.1"
@@ -84,6 +84,8 @@ embassy-sync = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-sync" }
 embassy-usb = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-usb" }
 embassy-executor = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-executor" }
 embassy-embedded-hal = { path = "/home/bla/_smarthome/embassy-fdcan/embassy-embedded-hal" }
+ector = { path = "/home/bla/_smarthome/_deps/ector/ector" }
+ector-macros = { path = "/home/bla/_smarthome/_deps/ector/macros" }
 
 # cargo build/run --release
 [profile.release]
