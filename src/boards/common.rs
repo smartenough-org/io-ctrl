@@ -1,10 +1,10 @@
 use embassy_stm32::pac;
-use embassy_stm32::{time::Hertz, Config};
+use embassy_stm32::{Config, time::Hertz};
 
 /// Chip specific clock configuration.
 pub fn config_stm32g4() -> Config {
     use embassy_stm32::rcc::{
-        mux, Hse, HseMode, Hsi48Config, Pll, PllMul, PllPreDiv, PllQDiv, PllRDiv, PllSource, Sysclk,
+        Hse, HseMode, Hsi48Config, Pll, PllMul, PllPreDiv, PllQDiv, PllRDiv, PllSource, Sysclk, mux,
     };
     let mut config = Config::default();
 

@@ -6,7 +6,7 @@ use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
-use crate::components::message::{args, Message};
+use crate::components::message::{Message, args};
 use crate::components::status;
 
 use crate::buttonsmash::consts::BINDINGS_COUNT;
@@ -27,7 +27,11 @@ pub struct CtrlApp {
 impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
         // TODO: Pass interconnect? Or a queue?
-        let mut executor = Executor::new(board.io_command_q, &board.interconnect, &board.shutters_channel);
+        let mut executor = Executor::new(
+            board.io_command_q,
+            &board.interconnect,
+            &board.shutters_channel,
+        );
         Self::configure(&mut executor).await;
 
         Self {
@@ -63,7 +67,6 @@ impl CtrlApp {
             // Configure shutter down/up. Don't use unconfigured shutters.
             Opcode::BindShutter(0, 13, 14),
             Opcode::BindShutter(1, 15, 16),
-
             // Opcode::BindLongActivate(1, 2),
             Opcode::Stop,
             /*
@@ -94,7 +97,10 @@ impl CtrlApp {
     fn spawn_tasks(&'static self, spawner: &Spawner) {
         let executor = unsafe { &mut *self.executor.get() };
         spawner.spawn(unwrap!(task_pump_switch_events_to_microvm(executor)));
-        spawner.spawn(unwrap!(run_event_converter(self.board.input_q, &EVENT_CHANNEL)));
+        spawner.spawn(unwrap!(run_event_converter(
+            self.board.input_q,
+            &EVENT_CHANNEL
+        )));
         spawner.spawn(unwrap!(task_read_interconnect(self.board)));
     }
 

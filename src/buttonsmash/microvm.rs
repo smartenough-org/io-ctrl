@@ -5,18 +5,14 @@
 
 use super::bindings::*;
 use super::consts::{
-    Command, Event, EventChannel, InIdx, ProcIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, REGISTERS,
+    Command, Event, EventChannel, InIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, ProcIdx, REGISTERS,
 };
-use super::{
-    layers::Layers,
-    opcodes::Opcode,
-    shutters
-};
+use super::{layers::Layers, opcodes::Opcode, shutters};
 use crate::boards::{IOCommand, OutputChannel};
 use crate::components::status;
 use crate::components::{
     interconnect::Interconnect,
-    message::{args, Message},
+    message::{Message, args},
 };
 use crate::io::events::Trigger;
 
@@ -65,8 +61,11 @@ enum MicroState {
 }
 
 impl<const BN: usize> Executor<BN> {
-    pub fn new(queue: &'static OutputChannel, interconnect: &'static Interconnect,
-               shutters_addr: &'static shutters::ShutterChannel) -> Self {
+    pub fn new(
+        queue: &'static OutputChannel,
+        interconnect: &'static Interconnect,
+        shutters_addr: &'static shutters::ShutterChannel,
+    ) -> Self {
         Self {
             layers: Layers::new(),
             bindings: BindingList::new(),
@@ -282,10 +281,10 @@ impl<const BN: usize> Executor<BN> {
                 // not be bound.
             }
             Opcode::BindShutter(shutter_idx, down_idx, up_idx) => {
-                self.shutters.send((shutter_idx, shutters::Cmd::SetIO(down_idx, up_idx))).await;
-            }
-
-            // Hypothetical?
+                self.shutters
+                    .send((shutter_idx, shutters::Cmd::SetIO(down_idx, up_idx)))
+                    .await;
+            } // Hypothetical?
               // Read input value (local) into register
               /*
                   Opcode::ReadInput(switch_id) => {
@@ -390,7 +389,7 @@ impl<const BN: usize> Executor<BN> {
                             }
                             Command::Shutter(shutter_idx, cmd) => {
                                 self.shutters.send((shutter_idx, cmd)).await;
-                            },
+                            }
                         },
                         Action::Proc(proc_idx) => {
                             self.execute(proc_idx).await;

@@ -124,15 +124,15 @@ impl<const N: usize> BindingList<N> {
             if binding.idx != input_idx {
                 return None;
             }
-            if let Some(layer) = layer {
-                if layer != binding.layer {
-                    continue;
-                }
+            if let Some(layer) = layer
+                && layer != binding.layer
+            {
+                continue;
             }
-            if let Some(trigger) = trigger {
-                if trigger != binding.trigger {
-                    continue;
-                }
+            if let Some(trigger) = trigger
+                && trigger != binding.trigger
+            {
+                continue;
             }
             return Some(i);
         }

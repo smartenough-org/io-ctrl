@@ -5,7 +5,7 @@ use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
 use crate::components::{
-    message::{args, Message, MessageRaw},
+    message::{Message, MessageRaw, args},
     status, usb_connect,
 };
 

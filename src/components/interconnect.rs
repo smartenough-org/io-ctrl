@@ -2,7 +2,7 @@ use crate::components::message::MessageRaw;
 use crate::components::status;
 use crate::config::LOCAL_ADDRESS;
 use defmt::*;
-use embassy_stm32::can::{self, BufferedCanSender, BufferedCanReceiver};
+use embassy_stm32::can::{self, BufferedCanReceiver, BufferedCanSender};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
 use static_cell::StaticCell;

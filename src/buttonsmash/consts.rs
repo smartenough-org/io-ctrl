@@ -1,8 +1,8 @@
 use defmt::Format;
 
+use super::shutters;
 use crate::io::events::{ButtonEvent, Trigger};
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
-use super::shutters;
 /*
  * Shared, common constants and trivial structures
  */

@@ -1,8 +1,8 @@
 use embassy_stm32::can;
 
 use crate::buttonsmash::{
+    consts::{InIdx, OutIdx, ProcIdx, ShutterIdx},
     shutters,
-    consts::{InIdx, OutIdx, ProcIdx, ShutterIdx}
 };
 
 /* Generic CAN has 11-bit addresses.
@@ -121,7 +121,7 @@ pub mod args {
                 3 => Some(Trigger::Deactivated),
                 4 => Some(Trigger::LongActivated),
                 5 => Some(Trigger::LongDeactivated),
-                _ => None
+                _ => None,
             }
         }
     }

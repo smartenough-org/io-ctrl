@@ -6,7 +6,7 @@ use crate::boards::{common, io_router};
 use crate::buttonsmash::shutters;
 use defmt::unwrap;
 use embassy_executor::Spawner;
-use embassy_stm32::rtc::{DateTime, Rtc, RtcConfig, RtcTimeProvider, RtcError};
+use embassy_stm32::rtc::{DateTime, Rtc, RtcConfig, RtcError, RtcTimeProvider};
 
 use crate::components::{interconnect::Interconnect, status::Status, usb_connect};
 
@@ -17,12 +17,12 @@ use embassy_sync::mutex::Mutex;
 use embassy_stm32::gpio::{Level, Output, Speed};
 
 use crate::io::{
-    events::InputChannel, events::IoIdx, expander_outputs, expander_inputs,
+    events::InputChannel, events::IoIdx, expander_inputs, expander_outputs,
     indexed_outputs::IndexedOutputs, pcf8575::Pcf8575,
 };
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
-use embassy_stm32::i2c::{I2c, Config};
+use embassy_stm32::i2c::{Config, I2c};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, can, i2c, peripherals};
 use static_cell::StaticCell;
@@ -112,16 +112,7 @@ impl Board {
         cfg.frequency = Hertz(400_000);
 
         /* Initialize I²C and 16-bit port expanders */
-        let i2c = I2c::new(
-            p.I2C3,
-            p.PA8,
-            p.PB5,
-            I2CIrqs,
-            p.DMA1_CH6,
-            p.DMA1_CH1,
-            // Hertz(400_000),
-            cfg,
-        );
+        let i2c = I2c::new(p.I2C3, p.PA8, p.PB5, I2CIrqs, p.DMA1_CH6, p.DMA1_CH1, cfg);
         let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
         /* There can be multiple combinations of expanders. The base is pretty ubiquitous:
@@ -157,7 +148,9 @@ impl Board {
 
         let expander_sensors = ExpanderInputs::new(
             io_sensors,
-            [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36],
+            [
+                21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+            ],
             &INPUT_CHANNEL,
             status,
             false, /* optional - at least for now */
@@ -165,6 +158,7 @@ impl Board {
 
         let main_outputs = ExpanderOutputs::new(io_ex_outputs);
 
+        #[rustfmt::skip]
         let indexed_outputs = Mutex::new(IndexedOutputs::new(
             [main_outputs],
             [
@@ -177,7 +171,6 @@ impl Board {
                 Output::new(p.PB12, Level::High, Speed::Low),
                 Output::new(p.PB15, Level::High, Speed::Low),
                 Output::new(p.PB11, Level::High, Speed::Low),
-
             ],
             // IDs for outputs in order, starting with expander outputs.
             [
@@ -192,7 +185,8 @@ impl Board {
 
         let usb_connect = usb_connect::UsbConnect::new(p.USB, p.PA12, p.PA11);
         let smngr = shutters::Manager::new(&OUTPUT_CHANNEL);
-        let shutters_channel: shutters::ShutterChannel = ector::actor!(spawner, shutters, shutters::Manager, smngr).into();
+        let shutters_channel: shutters::ShutterChannel =
+            ector::actor!(spawner, shutters, shutters::Manager, smngr).into();
 
         info!("Board initialized");
         Self {
@@ -205,7 +199,7 @@ impl Board {
             usb_up: &USB_UP,
             usb_down: &USB_DOWN,
             rtc: Mutex::new(rtc),
-            time_provider: time_provider,
+            time_provider,
             input_q: &INPUT_CHANNEL,
             io_command_q: &OUTPUT_CHANNEL,
             shutters_channel,
@@ -259,13 +253,13 @@ impl Board {
 
                 DateTime::from(
                     2025,
-                    1 /* month */,
-                    1 /* day */,
+                    1, /* month */
+                    1, /* day */
                     embassy_stm32::rtc::DayOfWeek::Wednesday,
-                    0 /* hour */,
-                    0 /* minute */,
-                    0 /* second */,
-                    0 /* usecond */,
+                    0, /* hour */
+                    0, /* minute */
+                    0, /* second */
+                    0, /* usecond */
                 )
                 .expect("This should work")
             }

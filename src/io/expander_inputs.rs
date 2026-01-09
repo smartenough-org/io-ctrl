@@ -133,8 +133,7 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                                 switch_id: self.io_indices[idx],
                                 state: events::SwitchState::Activated,
                             })
-                                .await;
-
+                            .await;
                         }
                         core::cmp::Ordering::Greater => {
                             /* Was activated and still is active */
@@ -143,7 +142,7 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                                 switch_id: self.io_indices[idx],
                                 state: events::SwitchState::Active(time_active),
                             })
-                                .await;
+                            .await;
                         }
                         _ => {
                             /* Not yet active */

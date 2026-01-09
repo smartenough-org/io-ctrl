@@ -5,7 +5,7 @@
  * - Report state changes during movement.
  */
 use ector;
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{Either, select};
 use embassy_time::{Duration, Instant, Timer};
 
 use crate::boards::{IOCommand, OutputChannel};
@@ -52,7 +52,7 @@ pub enum Cmd {
     TiltReverse,
 
     /// Shutters are configured with commands.
-    SetIO(/* down */OutIdx, /* up */OutIdx),
+    SetIO(/* down */ OutIdx, /* up */ OutIdx),
     // TODO SetRiseDropTime(u16, u16),
     // TODO SetTiltOverTime(u16, u16),
 }
@@ -72,33 +72,15 @@ mod codes {
 impl Cmd {
     pub fn from_raw(raw: &[u8; 5]) -> Option<Self> {
         Some(match raw[0] {
-            codes::GO => {
-                Cmd::Go(Position::new(raw[1], raw[2]))
-            }
-            codes::OPEN => {
-                Cmd::Open
-            }
-            codes::CLOSE => {
-                Cmd::Close
-            }
-            codes::TILT => {
-                Cmd::Tilt(raw[1])
-            }
-            codes::TILT_CLOSE => {
-                Cmd::Close
-            }
-            codes::TILT_OPEN => {
-                Cmd::TiltOpen
-            }
-            codes::TILT_HALF => {
-                Cmd::TiltHalf
-            }
-            codes::TILT_REVERSE => {
-                Cmd::TiltReverse
-            }
-            codes::SET_IO => {
-                Cmd::SetIO(raw[1], raw[2])
-            }
+            codes::GO => Cmd::Go(Position::new(raw[1], raw[2])),
+            codes::OPEN => Cmd::Open,
+            codes::CLOSE => Cmd::Close,
+            codes::TILT => Cmd::Tilt(raw[1]),
+            codes::TILT_CLOSE => Cmd::Close,
+            codes::TILT_OPEN => Cmd::TiltOpen,
+            codes::TILT_HALF => Cmd::TiltHalf,
+            codes::TILT_REVERSE => Cmd::TiltReverse,
+            codes::SET_IO => Cmd::SetIO(raw[1], raw[2]),
             _ => {
                 return None;
             }
@@ -113,34 +95,34 @@ impl Cmd {
                 raw[0] = codes::GO;
                 raw[1] = position.height;
                 raw[2] = position.tilt;
-            },
+            }
             Cmd::Open => {
                 raw[0] = codes::OPEN;
-            },
+            }
             Cmd::Close => {
                 raw[0] = codes::CLOSE;
-            },
+            }
             Cmd::Tilt(tilt) => {
                 raw[0] = codes::TILT;
                 raw[1] = *tilt;
-            },
+            }
             Cmd::TiltClose => {
                 raw[0] = codes::TILT_CLOSE;
-            },
+            }
             Cmd::TiltOpen => {
                 raw[0] = codes::TILT_OPEN;
-            },
+            }
             Cmd::TiltHalf => {
                 raw[0] = codes::TILT_HALF;
-            },
+            }
             Cmd::TiltReverse => {
                 raw[0] = codes::TILT_REVERSE;
-            },
+            }
             Cmd::SetIO(down, up) => {
                 raw[0] = codes::SET_IO;
                 raw[1] = *down;
                 raw[2] = *up;
-            },
+            }
         }
     }
 }
@@ -211,8 +193,13 @@ pub struct Shutter<'a> {
 
 impl Format for Shutter<'_> {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "Shutter {{pos={:?} target={:?} action={:?}}}",
-                      self.position, self.target, self.action);
+        defmt::write!(
+            fmt,
+            "Shutter {{pos={:?} target={:?} action={:?}}}",
+            self.position,
+            self.target,
+            self.action
+        );
     }
 }
 
@@ -236,7 +223,8 @@ impl Config {
             self.drop_time
         } else {
             self.rise_time
-        }.as_millis();
+        }
+        .as_millis();
 
         let diff = from.abs_diff(to) as u64;
         Duration::from_millis(cost * diff / 100)
@@ -258,13 +246,9 @@ impl Config {
     fn time_as_travel(&self, dir: i8, elapsed: Duration) -> u8 {
         let movement = match dir {
             // Going down (towards higher height)
-            1 => {
-                100 * elapsed.as_millis() / self.drop_time.as_millis()
-            },
+            1 => 100 * elapsed.as_millis() / self.drop_time.as_millis(),
             // Going up (towards lower height)
-            -1 => {
-                100 * elapsed.as_millis() / self.rise_time.as_millis()
-            }
+            -1 => 100 * elapsed.as_millis() / self.rise_time.as_millis(),
             _ => {
                 // TODO: enum?
                 panic!("Bad direction argument");
@@ -405,10 +389,16 @@ impl<'a> Shutter<'a> {
         // Step I: Update tilt / height if we are in motion.
         let (tilt, elapsed) = self.consume_tilt(now);
         let height = self.consume_height(elapsed);
-        info!("Update: from h{}t{} -> h{}t{} delta h{}t{} in {}",
-              self.position.height, self.position.tilt,
-              self.target.height, self.target.tilt,
-              tilt, height, elapsed);
+        info!(
+            "Update: from h{}t{} -> h{}t{} delta h{}t{} in {}",
+            self.position.height,
+            self.position.tilt,
+            self.target.height,
+            self.target.tilt,
+            tilt,
+            height,
+            elapsed
+        );
 
         self.position.tilt = tilt;
         self.position.height = height;
@@ -482,7 +472,8 @@ impl<'a> Shutter<'a> {
                     }
                 } else {
                     // The movement should continue.
-                    self.cfg.travel_as_time(self.position.height, self.target.height)
+                    self.cfg
+                        .travel_as_time(self.position.height, self.target.height)
                 }
             }
             Action::Down(_) => {
@@ -500,7 +491,8 @@ impl<'a> Shutter<'a> {
                     }
                 } else {
                     // The movement should continue.
-                    self.cfg.travel_as_time(self.position.height, self.target.height)
+                    self.cfg
+                        .travel_as_time(self.position.height, self.target.height)
                 }
             }
         }
@@ -511,9 +503,7 @@ impl<'a> Shutter<'a> {
     async fn finish(&mut self, now: Instant) {
         match &self.action {
             Action::Idle => {}
-            Action::Cooldown(_) => {
-                /* Update can finish a cooldown. We don't have to. */
-            }
+            Action::Cooldown(_) => { /* Update can finish a cooldown. We don't have to. */ }
             Action::Up(_) | Action::Down(_) => {
                 self.go_idle().await;
                 self.action = Action::Cooldown(now);
@@ -524,10 +514,13 @@ impl<'a> Shutter<'a> {
     // Initiate new movement.
     async fn set_target(&mut self, now: Instant, target: Position) -> Duration {
         match self.action {
-            Action::Idle => { /* Ok */ },
-            Action::Cooldown(_) => { /* Ok */ },
+            Action::Idle => { /* Ok */ }
+            Action::Cooldown(_) => { /* Ok */ }
             _ => {
-                panic!("Go action called when we're active {:?}. Finish first.", self.action);
+                panic!(
+                    "Go action called when we're active {:?}. Finish first.",
+                    self.action
+                );
             }
         }
         self.target = target;
@@ -548,19 +541,14 @@ impl<'a> Shutter<'a> {
         info!("Shutter after finishing previous actions: {:?}", self);
 
         let target = match cmd {
-            Cmd::Go(target) => {
-                target
-            }
+            Cmd::Go(target) => target,
             Cmd::Open => {
                 if !self.in_sync {
                     // That's simplification
                     self.position = Position::new(100, 100);
                     self.in_sync = true;
                 }
-                Position {
-                    height: 0,
-                    tilt: 0,
-                }
+                Position { height: 0, tilt: 0 }
             }
             Cmd::Close => {
                 if !self.in_sync {
@@ -573,36 +561,26 @@ impl<'a> Shutter<'a> {
                 }
             }
 
-            Cmd::TiltClose => {
-                Position {
-                    height: self.position.height,
-                    tilt: 100,
-                }
-            }
-            Cmd::TiltOpen => {
-                Position {
-                    height: self.position.height,
-                    tilt: 0,
-                }
-            }
-            Cmd::TiltHalf => {
-                Position {
-                    height: self.position.height,
-                    tilt: 50,
-                }
-            }
-            Cmd::TiltReverse => {
-                Position {
-                    height: self.position.height,
-                    tilt: if self.position.tilt > 0 { 0 } else { 100 },
-                }
-            }
-            Cmd::Tilt(tilt) => {
-                Position {
-                    height: self.position.height,
-                    tilt,
-                }
-            }
+            Cmd::TiltClose => Position {
+                height: self.position.height,
+                tilt: 100,
+            },
+            Cmd::TiltOpen => Position {
+                height: self.position.height,
+                tilt: 0,
+            },
+            Cmd::TiltHalf => Position {
+                height: self.position.height,
+                tilt: 50,
+            },
+            Cmd::TiltReverse => Position {
+                height: self.position.height,
+                tilt: if self.position.tilt > 0 { 0 } else { 100 },
+            },
+            Cmd::Tilt(tilt) => Position {
+                height: self.position.height,
+                tilt,
+            },
             Cmd::SetIO(down_idx, up_idx) => {
                 assert_eq!(self.action, Action::Idle);
                 self.cfg.down = down_idx;
@@ -631,7 +609,7 @@ impl Manager {
                 Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
                 Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
                 Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
-            ]
+            ],
         }
     }
 }
@@ -678,7 +656,6 @@ pub mod tests {
     use crate::boards::OutputChannel;
 
     pub async fn single_shutter() {
-
         let channel = OutputChannel::new();
         let mut shutter = Shutter::new(1, 2, &channel);
 
@@ -686,19 +663,19 @@ pub mod tests {
         shutter.in_sync = true;
 
         defmt::info!("Initial test shutter: {:?}", shutter);
-        assert_eq!(shutter.cfg.tilt_as_time(0, 100),
-                   shutter.cfg.tilt_time);
-        assert_eq!(shutter.cfg.tilt_as_time(100, 0),
-                   shutter.cfg.tilt_time);
-        assert_eq!(shutter.cfg.tilt_as_time(50, 0),
-                   shutter.cfg.tilt_time / 2);
-        assert_eq!(shutter.cfg.tilt_as_time(0, 50),
-                   shutter.cfg.tilt_time / 2);
+        assert_eq!(shutter.cfg.tilt_as_time(0, 100), shutter.cfg.tilt_time);
+        assert_eq!(shutter.cfg.tilt_as_time(100, 0), shutter.cfg.tilt_time);
+        assert_eq!(shutter.cfg.tilt_as_time(50, 0), shutter.cfg.tilt_time / 2);
+        assert_eq!(shutter.cfg.tilt_as_time(0, 50), shutter.cfg.tilt_time / 2);
 
-        assert_eq!(shutter.cfg.travel_as_time(0, 100), // down
-                   shutter.cfg.drop_time);
-        assert_eq!(shutter.cfg.travel_as_time(100, 0), // down
-                   shutter.cfg.rise_time);
+        assert_eq!(
+            shutter.cfg.travel_as_time(0, 100), // down
+            shutter.cfg.drop_time
+        );
+        assert_eq!(
+            shutter.cfg.travel_as_time(100, 0), // down
+            shutter.cfg.rise_time
+        );
         assert_eq!(shutter.action, Action::Idle);
         assert!(channel.try_receive().is_err());
 
@@ -734,8 +711,10 @@ pub mod tests {
         assert_eq!(shutter.position.tilt, 100);
         assert_eq!(shutter.position.height, 50);
         assert_ne!(shutter.action, Action::Idle);
-        assert_ne!(core::mem::discriminant(&shutter.action),
-                   core::mem::discriminant(&Action::Cooldown(now)));
+        assert_ne!(
+            core::mem::discriminant(&shutter.action),
+            core::mem::discriminant(&Action::Cooldown(now))
+        );
         assert!(channel.try_receive().is_err());
 
         // Let's wait another 50% of time.
@@ -821,6 +800,5 @@ pub mod tests {
         shutter.update(now).await;
         assert_eq!(shutter.action, Action::Idle);
         assert!(channel.try_receive().is_err());
-
     }
 }
