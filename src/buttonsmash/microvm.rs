@@ -120,18 +120,18 @@ impl<const BN: usize> Executor<BN> {
             IOCommand::ToggleOutput(out) => Message::OutputChanged {
                 output: *out,
                 state: if self.state.outputs[*out as usize] {
-                    args::OutputState::On
+                    args::OutputChangeRequest::On
                 } else {
-                    args::OutputState::Off
+                    args::OutputChangeRequest::Off
                 },
             },
             IOCommand::ActivateOutput(out) => Message::OutputChanged {
                 output: *out,
-                state: args::OutputState::On,
+                state: args::OutputChangeRequest::On,
             },
             IOCommand::DeactivateOutput(out) => Message::OutputChanged {
                 output: *out,
-                state: args::OutputState::Off,
+                state: args::OutputChangeRequest::Off,
             },
         };
 

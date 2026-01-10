@@ -78,7 +78,7 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
 
         loop {
             if !initialized {
-                // Initialize pins to outputs.
+                // Initialize as high to use them as inputs.
                 if expander.write(0xffff).await.is_ok() {
                     initialized = true;
                 } else {

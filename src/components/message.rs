@@ -42,6 +42,8 @@ mod msg_type {
 
     /// `Ping` of sorts.
     pub const REQUEST_STATUS: u8 = 0x0D;
+    /// My output status, not necessarily changed. Requested or initial.
+    pub const STATUS_IO: u8 = 0x0E;
 
     /// Periodic not triggered by an event status.
     pub const STATUS: u8 = 0x10;
@@ -68,6 +70,7 @@ mod msg_type {
 
 pub mod args {
     pub use crate::io::events::Trigger;
+    use super::{InIdx, OutIdx};
 
     #[derive(Clone, Copy, defmt::Format)]
     #[repr(u16)]
@@ -77,11 +80,51 @@ pub mod args {
 
     #[derive(Clone, Copy, defmt::Format)]
     #[repr(u8)]
-    pub enum OutputState {
+    pub enum OutputChangeRequest {
+        /// Disable output
         Off = 0,
+        /// Enable output
         On = 1,
+        /// Toggle output
         Toggle = 2,
-        // on for x?
+    }
+
+    #[derive(Clone, Copy, defmt::Format)]
+    #[repr(u8)]
+    pub enum IOState {
+        /// Input/Output is disabled.
+        Off = 0,
+        /// Input/Output is enabled.
+        On = 1,
+        /// IO is certainly defined, but Expander is not available.
+        Error = 2,
+        /// State is unknown. Maybe requested IO index is invalid.
+        Unknown = 3,
+    }
+
+    #[derive(Clone, Copy, defmt::Format)]
+    #[repr(u8)]
+    pub enum IOType {
+        /// Idx describes an Input.
+        Input(InIdx),
+        /// IDx describes an Output.
+        Output(OutIdx),
+    }
+
+    impl IOState {
+        pub fn to_bytes(self) -> u8 {
+            self as u8
+        }
+
+        pub fn from_u8(raw: u8) -> Option<Self> {
+            match raw {
+                0 => Some(IOState::Off),
+                1 => Some(IOState::On),
+                2 => Some(IOState::Error),
+                3 => Some(IOState::Unknown),
+                _ => None,
+            }
+        }
     }
 
     impl InfoCode {
@@ -90,7 +133,7 @@ pub mod args {
         }
     }
 
-    impl OutputState {
+    impl OutputChangeRequest {
         pub fn to_bytes(self) -> u8 {
             self as u8
         }
@@ -139,17 +182,24 @@ pub enum Message {
     /// My output was changed.
     OutputChanged {
         output: OutIdx,
-        state: args::OutputState,
+        state: args::OutputChangeRequest,
+    },
+
+    /// My input/output state (not changed - just current.)
+    StatusIO {
+        io: args::IOType,
+        state: args::IOState,
     },
 
     /// My input was changed.
     InputTriggered { input: InIdx },
 
+
     /// Request output change.
     /// 0 - deactivate, 1 - activate, 2 - toggle, * reserved (eg. time-limited setting)
     SetOutput {
         output: OutIdx,
-        state: args::OutputState,
+        state: args::OutputChangeRequest,
     },
 
     // Behave as if input was triggered
@@ -294,7 +344,7 @@ impl Message {
                     return None;
                 }
 
-                let state = args::OutputState::from_u8(raw.data[1])?;
+                let state = args::OutputChangeRequest::from_u8(raw.data[1])?;
                 Some(Message::SetOutput {
                     output: raw.data[0],
                     state,
@@ -394,6 +444,21 @@ impl Message {
                 raw.length = 2;
                 raw.data[0] = *output;
                 raw.data[1] = state.to_bytes();
+            }
+            Message::StatusIO { io, state } => {
+                raw.msg_type = msg_type::STATUS_IO;
+                raw.length = 3;
+                match io {
+                    args::IOType::Input(idx) => {
+                        raw.data[0] = *idx;
+                        raw.data[1] = 0;
+                    },
+                    args::IOType::Output(idx) => {
+                        raw.data[0] = *idx;
+                        raw.data[1] = 1;
+                    }
+                }
+                raw.data[2] = state.to_bytes();
             }
             Message::InputTriggered { input } => {
                 raw.msg_type = msg_type::INPUT_TRIGGERED;

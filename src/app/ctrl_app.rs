@@ -217,9 +217,9 @@ pub async fn task_read_interconnect(board: &'static Board) {
                     continue;
                 }
                 let event = match state {
-                    args::OutputState::On => Event::RemoteActivate(output),
-                    args::OutputState::Off => Event::RemoteDeactivate(output),
-                    args::OutputState::Toggle => Event::RemoteToggle(output),
+                    args::OutputChangeRequest::On => Event::RemoteActivate(output),
+                    args::OutputChangeRequest::Off => Event::RemoteDeactivate(output),
+                    args::OutputChangeRequest::Toggle => Event::RemoteToggle(output),
                 };
                 defmt::warn!("Trigger output {} to {:?} -> {:?}", output, state, event);
                 EVENT_CHANNEL.send(event).await;
@@ -305,6 +305,7 @@ pub async fn task_read_interconnect(board: &'static Board) {
             Message::Error { .. }
             | Message::Info { .. }
             | Message::OutputChanged { .. }
+            | Message::StatusIO { .. }
             | Message::InputTriggered { .. }
             | Message::Pong { .. }
             | Message::Status { .. } => {
