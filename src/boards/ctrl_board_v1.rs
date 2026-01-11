@@ -224,6 +224,15 @@ impl Board {
         self.indexed_outputs.lock().await.set(idx, state).await
     }
 
+    pub async fn toggle_output(&self, idx: IoIdx) -> Result<bool, ()> {
+        // TODO: Try few times; count errors; panic after some threshold.
+        self.indexed_outputs.lock().await.toggle(idx).await
+    }
+
+    pub async fn get_output(&self, idx: IoIdx) -> Option<bool> {
+        self.indexed_outputs.lock().await.get(idx)
+    }
+
     /// Read time from RTC.
     pub async fn read_time(&self) -> DateTime {
         match self.time_provider.now() {

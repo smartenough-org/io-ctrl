@@ -8,6 +8,7 @@ use super::consts::{
     Command, Event, EventChannel, InIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, ProcIdx, REGISTERS,
 };
 use super::{layers::Layers, opcodes::Opcode, shutters};
+use crate::boards::ctrl_board_v1::Board;
 use crate::boards::{IOCommand, OutputChannel};
 use crate::components::status;
 use crate::components::{
@@ -44,6 +45,7 @@ pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
     state: BoardState,
 
     // Our outputs
+    board: &'static Board,
     output_channel: &'static OutputChannel,
     interconnect: &'static Interconnect,
     shutters: &'static shutters::ShutterChannel,
@@ -62,6 +64,7 @@ enum MicroState {
 
 impl<const BN: usize> Executor<BN> {
     pub fn new(
+        board: &'static Board,
         queue: &'static OutputChannel,
         interconnect: &'static Interconnect,
         shutters_addr: &'static shutters::ShutterChannel,
@@ -72,6 +75,7 @@ impl<const BN: usize> Executor<BN> {
             opcodes: [Opcode::Noop; 1024],
             procedures: [0; MAX_PROCEDURES],
             state: BoardState::default(),
+            board,
             output_channel: queue,
             interconnect,
             shutters: shutters_addr,
@@ -88,9 +92,40 @@ impl<const BN: usize> Executor<BN> {
         self.layers.reset();
     }
 
-    /// Handle outputs from Executor.
-    async fn emit(&mut self, command: IOCommand) {
-        defmt::info!("Emiting from executor {:?}", command);
+    /// Broadcast our output state change
+    async fn emit_io_message(&mut self, command: &IOCommand) {
+        defmt::info!("Emiting IO message from executor {:?}", command);
+
+        // TODO: I've mixed feeling about handling this in emit(). Move lower
+        // and create emit_message and emit_io?
+        let message = match &command {
+            IOCommand::ToggleOutput(out) => Message::OutputChanged {
+                output: *out,
+                // NOTE: This assumes the local state was already flipped.
+                state: if self.state.outputs[*out as usize] {
+                    args::OutputChangeRequest::On
+                } else {
+                    args::OutputChangeRequest::Off
+                },
+            },
+            IOCommand::ActivateOutput(out) => Message::OutputChanged {
+                output: *out,
+                state: args::OutputChangeRequest::On,
+            },
+            IOCommand::DeactivateOutput(out) => Message::OutputChanged {
+                output: *out,
+                state: args::OutputChangeRequest::Off,
+            },
+        };
+
+        // Transmit information over CAN.
+        // In case of broken CAN communication this will be ignored.
+        self.interconnect.transmit_response(&message, false).await;
+    }
+
+    /// Handle outputs from Executor: Emit two messages and change internal state.
+    async fn alter_output(&mut self, command: IOCommand) {
+        defmt::info!("Executor changes output state {:?}", command);
 
         // TODO: Maybe some timeout in case it breaks and we don't want to hang?
         // This should rather block in case of problems. The problems should not
@@ -114,30 +149,11 @@ impl<const BN: usize> Executor<BN> {
             }
         };
 
-        // TODO: I've mixed feeling about handling this in emit(). Move lower
-        // and create emit_message and emit_io?
-        let message = match &command {
-            IOCommand::ToggleOutput(out) => Message::OutputChanged {
-                output: *out,
-                state: if self.state.outputs[*out as usize] {
-                    args::OutputChangeRequest::On
-                } else {
-                    args::OutputChangeRequest::Off
-                },
-            },
-            IOCommand::ActivateOutput(out) => Message::OutputChanged {
-                output: *out,
-                state: args::OutputChangeRequest::On,
-            },
-            IOCommand::DeactivateOutput(out) => Message::OutputChanged {
-                output: *out,
-                state: args::OutputChangeRequest::Off,
-            },
-        };
+        self.emit_io_message(&command).await;
+    }
 
-        // Transmit information over CAN.
-        // In case of broken CAN communication this will be ignored.
-        self.interconnect.transmit_response(&message, false).await;
+    async fn send_status(&mut self) {
+        todo!();
     }
 
     /// Helper: Bind input/trigger to a call to a given procedure.
@@ -192,13 +208,13 @@ impl<const BN: usize> Executor<BN> {
                 self.state.registers[register as usize] = value;
             }
             Opcode::Toggle(out_idx) => {
-                self.emit(IOCommand::ToggleOutput(out_idx)).await;
+                self.alter_output(IOCommand::ToggleOutput(out_idx)).await;
             }
             Opcode::Activate(out_idx) => {
-                self.emit(IOCommand::ActivateOutput(out_idx)).await;
+                self.alter_output(IOCommand::ActivateOutput(out_idx)).await;
             }
             Opcode::Deactivate(out_idx) => {
-                self.emit(IOCommand::DeactivateOutput(out_idx)).await;
+                self.alter_output(IOCommand::DeactivateOutput(out_idx)).await;
             }
 
             // Enable a layer (TODO: push layer onto a layer stack?)
@@ -284,9 +300,10 @@ impl<const BN: usize> Executor<BN> {
                 self.shutters
                     .send((shutter_idx, shutters::Cmd::SetIO(down_idx, up_idx)))
                     .await;
-            } // Hypothetical?
-              // Read input value (local) into register
-              /*
+            }
+            // Hypothetical?
+            // Read input value (local) into register
+            /*
                   Opcode::ReadInput(switch_id) => {
               },
                   /// Read input value (local) into register
@@ -295,7 +312,7 @@ impl<const BN: usize> Executor<BN> {
                   /// Call first if register is True, second one if False.
                   Opcode::CallConditionally(proc_idx, proc_idx) => {
               },
-                   */
+             */
         }
         MicroState::Continue
     }
@@ -379,13 +396,13 @@ impl<const BN: usize> Executor<BN> {
                             }
                             Command::Noop => {}
                             Command::ToggleOutput(out) => {
-                                self.emit(IOCommand::ToggleOutput(out)).await;
+                                self.alter_output(IOCommand::ToggleOutput(out)).await;
                             }
                             Command::ActivateOutput(out) => {
-                                self.emit(IOCommand::ActivateOutput(out)).await;
+                                self.alter_output(IOCommand::ActivateOutput(out)).await;
                             }
                             Command::DeactivateOutput(out) => {
-                                self.emit(IOCommand::DeactivateOutput(out)).await;
+                                self.alter_output(IOCommand::DeactivateOutput(out)).await;
                             }
                             Command::Shutter(shutter_idx, cmd) => {
                                 self.shutters.send((shutter_idx, cmd)).await;
@@ -404,13 +421,13 @@ impl<const BN: usize> Executor<BN> {
                 self.execute(proc_idx).await;
             }
             Event::RemoteToggle(out_idx) => {
-                self.emit(IOCommand::ToggleOutput(out_idx)).await;
+                self.alter_output(IOCommand::ToggleOutput(out_idx)).await;
             }
             Event::RemoteActivate(out_idx) => {
-                self.emit(IOCommand::ActivateOutput(out_idx)).await;
+                self.alter_output(IOCommand::ActivateOutput(out_idx)).await;
             }
             Event::RemoteDeactivate(out_idx) => {
-                self.emit(IOCommand::DeactivateOutput(out_idx)).await;
+                self.alter_output(IOCommand::DeactivateOutput(out_idx)).await;
             }
         }
     }

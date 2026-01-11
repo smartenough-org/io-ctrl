@@ -28,6 +28,7 @@ impl CtrlApp {
     pub async fn new(board: &'static Board) -> Self {
         // TODO: Pass interconnect? Or a queue?
         let mut executor = Executor::new(
+            board,
             board.io_command_q,
             &board.interconnect,
             &board.shutters_channel,

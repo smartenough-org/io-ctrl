@@ -18,10 +18,10 @@ pub enum IOCommand {
 pub type OutputChannel = Channel<ThreadModeRawMutex, IOCommand, 3>;
 
 /// Read events from command queue and alter our outputs.
+/// TODO: OBSOLETE IDEA
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_io_router(board: &'static Board, cmd_queue: &'static OutputChannel) {
     /* All initially disabled (in low-state enabled devices) */
-    let mut output_state: [bool; 32] = [true; 32];
     for n in 1..=16 {
         if board.set_output(n as IoIdx, true).await.is_err() {
             defmt::error!("Unable to initialize output IO. Expander failure?");
@@ -41,18 +41,15 @@ pub async fn task_io_router(board: &'static Board, cmd_queue: &'static OutputCha
         // TODO: Unwraps - make it soft.
         let result = match command {
             IOCommand::ToggleOutput(idx) => {
-                output_state[idx as usize] = !output_state[idx as usize];
-                board.set_output(idx, output_state[idx as usize]).await
+                board.toggle_output(idx).await
             }
             IOCommand::ActivateOutput(idx) => {
                 // Low-state activate
-                output_state[idx as usize] = false;
-                board.set_output(idx, false).await
+                board.set_output(idx, false).await.map(|()| true)
             }
             IOCommand::DeactivateOutput(idx) => {
                 // Low-state activate
-                output_state[idx as usize] = true;
-                board.set_output(idx, true).await
+                board.set_output(idx, true).await.map(|()| false)
             }
         };
         if result.is_err() {

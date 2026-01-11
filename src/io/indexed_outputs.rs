@@ -8,8 +8,13 @@ pub(crate) struct IndexedOutputs<
     ET: GroupedOutputs,
     P: OutputPin,
 > {
+    /// Numerical indices of given input/outputs - a unified mapping.
     indices: [u8; INDICES_N],
+    /// Current known output status (true - high, false - low)
+    state: [bool; INDICES_N],
+    /// IO Expanders (16-bit PCF*)
     grouped: [ET; EXPANDER_N],
+    /// Native pins.
     native: [P; NATIVE_N],
 }
 
@@ -23,6 +28,7 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
     pub fn new(grouped: [ET; EN], native: [P; NN], indices: [u8; IN]) -> Self {
         IndexedOutputs {
             grouped,
+            state: [false; IN],
             native,
             indices,
         }
@@ -39,6 +45,21 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
         None
     }
 
+    /// Read output state as we set it (doesn't read the PIN state).
+    pub fn get(&self, io_idx: IoIdx) -> Option<bool> {
+        Some(self.state[self.find_id(io_idx)?])
+    }
+
+    /// Toggle output and state. Return new state.
+    pub async fn toggle(&mut self, io_idx: IoIdx) -> Result<bool, ()> {
+        let position = self.find_id(io_idx).ok_or(())?;
+
+        let current = self.state[position];
+        self.set(io_idx, !current).await?;
+        Ok(!current)
+    }
+
+    /// Set output based on IO index.
     pub async fn set(&mut self, io_idx: IoIdx, high: bool) -> Result<(), ()> {
         if let Some(position) = self.find_id(io_idx) {
             let expander_no = position / 16;
@@ -50,6 +71,7 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
                 } else {
                     self.native[native_pos].set_low().unwrap();
                 }
+                self.state[position] = high;
                 return Ok(());
             } else {
                 let expander = &mut self.grouped[expander_no];
@@ -64,6 +86,7 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
                 } else {
                     expander.set_low(io_within).await?
                 }
+                self.state[position] = high;
             }
             Ok(())
         } else {
