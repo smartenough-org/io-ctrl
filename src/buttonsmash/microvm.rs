@@ -5,11 +5,11 @@
 
 use super::bindings::*;
 use super::consts::{
-    Command, Event, EventChannel, InIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, ProcIdx, REGISTERS,
+    Command, Event, EventChannel, InIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, OutIdx, ProcIdx, REGISTERS
 };
 use super::{layers::Layers, opcodes::Opcode, shutters};
 use crate::boards::ctrl_board_v1::Board;
-use crate::boards::{IOCommand, OutputChannel};
+use crate::boards::IOCommand;
 use crate::components::status;
 use crate::components::{
     interconnect::Interconnect,
@@ -18,19 +18,16 @@ use crate::components::{
 use crate::io::events::Trigger;
 
 /// MicroVM holds internal state that can be queried by code.
+/// TODO Output status migrated to Board. So now this is WIP.
 pub struct BoardState {
     /// TODO: In progress.
     registers: [u8; REGISTERS],
-    /// True if active - local cache of set state, independent of queue.
-    /// This might break a bit with timed activations. Unsure how to proceed with those.
-    outputs: [bool; 32],
 }
 
 impl Default for BoardState {
     fn default() -> Self {
         Self {
             registers: [0; REGISTERS],
-            outputs: [false; 32],
         }
     }
 }
@@ -46,7 +43,6 @@ pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
 
     // Our outputs
     board: &'static Board,
-    output_channel: &'static OutputChannel,
     interconnect: &'static Interconnect,
     shutters: &'static shutters::ShutterChannel,
 }
@@ -65,7 +61,6 @@ enum MicroState {
 impl<const BN: usize> Executor<BN> {
     pub fn new(
         board: &'static Board,
-        queue: &'static OutputChannel,
         interconnect: &'static Interconnect,
         shutters_addr: &'static shutters::ShutterChannel,
     ) -> Self {
@@ -76,7 +71,6 @@ impl<const BN: usize> Executor<BN> {
             procedures: [0; MAX_PROCEDURES],
             state: BoardState::default(),
             board,
-            output_channel: queue,
             interconnect,
             shutters: shutters_addr,
         }
@@ -93,29 +87,15 @@ impl<const BN: usize> Executor<BN> {
     }
 
     /// Broadcast our output state change
-    async fn emit_io_message(&mut self, command: &IOCommand) {
-        defmt::info!("Emiting IO message from executor {:?}", command);
+    async fn emit_io_message(&mut self, out: OutIdx, final_state: bool) {
+        defmt::info!("Emiting IO message for output {} to state {} from executor", out, final_state);
 
         // TODO: I've mixed feeling about handling this in emit(). Move lower
         // and create emit_message and emit_io?
-        let message = match &command {
-            IOCommand::ToggleOutput(out) => Message::OutputChanged {
-                output: *out,
-                // NOTE: This assumes the local state was already flipped.
-                state: if self.state.outputs[*out as usize] {
-                    args::OutputChangeRequest::On
-                } else {
-                    args::OutputChangeRequest::Off
-                },
-            },
-            IOCommand::ActivateOutput(out) => Message::OutputChanged {
-                output: *out,
-                state: args::OutputChangeRequest::On,
-            },
-            IOCommand::DeactivateOutput(out) => Message::OutputChanged {
-                output: *out,
-                state: args::OutputChangeRequest::Off,
-            },
+
+        let message = Message::OutputChanged {
+            output: out,
+            state: if final_state { args::OutputChangeRequest::On } else { args::OutputChangeRequest::Off }
         };
 
         // Transmit information over CAN.
@@ -125,31 +105,28 @@ impl<const BN: usize> Executor<BN> {
 
     /// Handle outputs from Executor: Emit two messages and change internal state.
     async fn alter_output(&mut self, command: IOCommand) {
-        defmt::info!("Executor changes output state {:?}", command);
-
-        // TODO: Maybe some timeout in case it breaks and we don't want to hang?
-        // This should rather block in case of problems. The problems should not
-        // happen downstream (eg. infinitely awaiting on PCF)
-        if self.output_channel.try_send(command.clone()).is_err() {
-            defmt::warn!("Output channel is full! Hanging.");
-            status::COUNTERS.output_queue_full.inc();
-            self.output_channel.send(command.clone()).await;
-        }
 
         // Update local state
-        match &command {
+        let (result, out) = match &command {
             IOCommand::ToggleOutput(out) => {
-                self.state.outputs[*out as usize] = !self.state.outputs[*out as usize];
+                (self.board.toggle_output(*out).await, *out)
             }
             IOCommand::ActivateOutput(out) => {
-                self.state.outputs[*out as usize] = true;
+                (self.board.set_output(*out, true).await.map(|()| true), *out)
             }
             IOCommand::DeactivateOutput(out) => {
-                self.state.outputs[*out as usize] = false;
+                (self.board.set_output(*out, false).await.map(|()| false), *out)
             }
         };
 
-        self.emit_io_message(&command).await;
+        if let Ok(final_state) = result {
+            defmt::info!("Executor changed output state {:?}", command);
+            self.emit_io_message(out, final_state).await;
+        } else {
+            defmt::error!("Error while setting output {:?}", command);
+            status::COUNTERS.expander_output_error.inc();
+            // TODO: Send error message over CAN?
+        }
     }
 
     async fn send_status(&mut self) {

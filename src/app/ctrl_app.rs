@@ -29,7 +29,6 @@ impl CtrlApp {
         // TODO: Pass interconnect? Or a queue?
         let mut executor = Executor::new(
             board,
-            board.io_command_q,
             &board.interconnect,
             &board.shutters_channel,
         );
