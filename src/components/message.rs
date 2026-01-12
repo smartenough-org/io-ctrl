@@ -194,7 +194,6 @@ pub enum Message {
     /// My input was changed.
     InputTriggered { input: InIdx },
 
-
     /// Request output change.
     /// 0 - deactivate, 1 - activate, 2 - toggle, * reserved (eg. time-limited setting)
     SetOutput {
@@ -223,8 +222,8 @@ pub enum Message {
     /// Periodic not triggered by event status.
     Status {
         uptime: u32,
-        inputs: u16,
-        outputs: u16,
+        errors: u16,
+        warnings: u16,
     },
 
     /// Sent to endpoints.
@@ -396,7 +395,7 @@ impl Message {
                 body: u16::from_le_bytes([raw.data[0], raw.data[1]]),
             }),
 
-            msg_type::INFO | msg_type::ERROR | msg_type::STATUS => {
+            msg_type::INFO | msg_type::ERROR | msg_type::STATUS | msg_type::STATUS_IO => {
                 defmt::info!("Ignoring info/error/status message: {:?}", raw);
                 None
             }
@@ -478,14 +477,14 @@ impl Message {
             }
             Message::Status {
                 uptime,
-                inputs,
-                outputs,
+                errors,
+                warnings,
             } => {
                 raw.msg_type = msg_type::STATUS;
                 raw.length = 8;
                 raw.data[0..4].copy_from_slice(&uptime.to_le_bytes());
-                raw.data[4..6].copy_from_slice(&inputs.to_le_bytes());
-                raw.data[6..8].copy_from_slice(&outputs.to_le_bytes());
+                raw.data[4..6].copy_from_slice(&errors.to_le_bytes());
+                raw.data[6..8].copy_from_slice(&warnings.to_le_bytes());
             }
             Message::Ping { body } => {
                 raw.msg_type = msg_type::PING;

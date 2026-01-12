@@ -3,6 +3,8 @@
  * already enabled.
 */
 
+use embassy_time::{Duration, Timer};
+
 use super::bindings::*;
 use super::consts::{
     Command, Event, EventChannel, InIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, OutIdx, ProcIdx, REGISTERS
@@ -129,8 +131,62 @@ impl<const BN: usize> Executor<BN> {
         }
     }
 
+    /// Send MASS status info.
     async fn send_status(&mut self) {
-        todo!();
+        let status = self.board.get_output_status().await;
+        for (idx, state) in status {
+            let state = if state {
+                args::IOState::On
+            } else {
+                args::IOState::Off
+            };
+            let message = Message::StatusIO {
+                io: args::IOType::Output(idx),
+                state,
+            };
+            // Transmit information over CAN.
+            defmt::info!("Sent status message {:?}", message);
+            self.interconnect.transmit_response(&message, false).await;
+
+            // Don't block on CAN in case it died (we are alone on bus for
+            // example), but give it some time to send. On 250kBps frame should
+            // take < 0.6ms.
+            Timer::after(Duration::from_millis(1)).await;
+        }
+
+        for exp in [&self.board.expander_sensors, &self.board.expander_switches] {
+            let inputs = exp.get_inputs();
+            if let Some(inputs) = inputs {
+
+                for (idx, state) in inputs {
+                    let state = if state {
+                        args::IOState::On
+                    } else {
+                        args::IOState::Off
+                    };
+                    let message = Message::StatusIO {
+                        io: args::IOType::Input(idx),
+                        state,
+                    };
+                    // Transmit information over CAN.
+                    defmt::info!("Sent status input message {:?}", message);
+                    self.interconnect.transmit_response(&message, true).await;
+                    Timer::after(Duration::from_millis(1)).await;
+                }
+            } else {
+                for idx in exp.get_indices() {
+                    let message = Message::StatusIO {
+                        io: args::IOType::Input(*idx),
+                        state: args::IOState::Error,
+                    };
+                    self.interconnect.transmit_response(&message, true).await;
+                    Timer::after(Duration::from_millis(1)).await;
+                }
+                defmt::info!("One of expanders does not respond. Dead: {:?}", exp.get_indices());
+            }
+        }
+
+        // TODO: Send global warning/error status as well.
     }
 
     /// Helper: Bind input/trigger to a call to a given procedure.
@@ -278,6 +334,11 @@ impl<const BN: usize> Executor<BN> {
                     .send((shutter_idx, shutters::Cmd::SetIO(down_idx, up_idx)))
                     .await;
             }
+
+            Opcode::SendStatus => {
+                self.send_status().await;
+            }
+
             // Hypothetical?
             // Read input value (local) into register
             /*
@@ -405,6 +466,9 @@ impl<const BN: usize> Executor<BN> {
             }
             Event::RemoteDeactivate(out_idx) => {
                 self.alter_output(IOCommand::DeactivateOutput(out_idx)).await;
+            }
+            Event::RemoteStatusRequest => {
+                self.send_status().await;
             }
         }
     }

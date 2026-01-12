@@ -45,6 +45,14 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
         None
     }
 
+    pub fn get_all(&self) -> [(u8, bool); IN] {
+        let mut status = [(0, false); IN];
+        for i in 0..IN {
+            status[i] = (self.indices[i], self.state[i]);
+        }
+        status
+    }
+
     /// Read output state as we set it (doesn't read the PIN state).
     pub fn get(&self, io_idx: IoIdx) -> Option<bool> {
         Some(self.state[self.find_id(io_idx)?])

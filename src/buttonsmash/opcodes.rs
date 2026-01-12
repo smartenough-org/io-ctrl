@@ -35,6 +35,9 @@ pub enum Opcode {
     /// Direct output control: Deactivate IO (no matter state)
     Deactivate(OutIdx),
 
+    /// Generate a series of status events.
+    SendStatus,
+
     /// Enable a layer (later: push layer onto a layer stack)
     LayerPush(LayerIdx),
     LayerPop,

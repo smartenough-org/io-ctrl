@@ -68,6 +68,9 @@ impl CtrlApp {
             Opcode::BindShutter(0, 13, 14),
             Opcode::BindShutter(1, 15, 16),
             // Opcode::BindLongActivate(1, 2),
+
+            // Send the complete status on initialization.
+            Opcode::SendStatus,
             Opcode::Stop,
             /*
             Opcode::BindShortToggle(1, 10),
@@ -288,8 +291,8 @@ pub async fn task_read_interconnect(board: &'static Board) {
                 if !to_us {
                     continue;
                 }
-                defmt::info!("TODO: Send our status");
-                // TODO: This needs access to inputs / outputs and uptime. MicroVM has it?
+                let event = Event::RemoteStatusRequest;
+                EVENT_CHANNEL.send(event).await;
             }
 
             Message::Ping { body } => {

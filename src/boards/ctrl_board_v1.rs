@@ -57,6 +57,8 @@ static OUTPUT_CHANNEL: io_router::OutputChannel = io_router::OutputChannel::new(
 static USB_UP: usb_connect::CommChannel = usb_connect::CommChannel::new();
 static USB_DOWN: usb_connect::CommChannel = usb_connect::CommChannel::new();
 
+const INDICES_N: usize = 24;
+
 /// Represents our µC hardware interface. It's 'static and shared by most code.
 pub struct Board {
     // FIXME: ? UnsafeCell? For led maybe ok.
@@ -75,7 +77,9 @@ pub struct Board {
 
     /// Physical outputs.
     indexed_outputs:
-        Mutex<NoopRawMutex, IndexedOutputs<24, 1, 8, ExpanderOutputs, Output<'static>>>,
+        Mutex<NoopRawMutex,
+              IndexedOutputs<INDICES_N, 1, 8,
+                             ExpanderOutputs, Output<'static>>>,
     /// CAN communication between the layers.
     pub interconnect: Interconnect,
 
@@ -231,6 +235,10 @@ impl Board {
 
     pub async fn get_output(&self, idx: IoIdx) -> Option<bool> {
         self.indexed_outputs.lock().await.get(idx)
+    }
+
+    pub async fn get_output_status(&self) -> [(u8, bool); INDICES_N] {
+        self.indexed_outputs.lock().await.get_all()
     }
 
     /// Read time from RTC.
