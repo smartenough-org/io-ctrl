@@ -3,15 +3,16 @@
  * already enabled.
 */
 
+use defmt::Format;
 use embassy_time::{Duration, Timer};
 
 use super::bindings::*;
 use super::consts::{
-    Command, Event, EventChannel, InIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, OutIdx, ProcIdx, REGISTERS
+    Command, Event, EventChannel, InIdx, MAX_LAYERS, MAX_PROCEDURES, MAX_STACK, OutIdx, ProcIdx,
+    REGISTERS,
 };
 use super::{layers::Layers, opcodes::Opcode, shutters};
 use crate::boards::ctrl_board_v1::Board;
-use crate::boards::IOCommand;
 use crate::components::status;
 use crate::components::{
     interconnect::Interconnect,
@@ -60,6 +61,16 @@ enum MicroState {
     // Jump(usize),
 }
 
+#[derive(Debug, Eq, PartialEq, Format, Clone)]
+pub enum IOCommand {
+    /// Toggle output...
+    ToggleOutput(OutIdx),
+    /// Enable output of given ID - Local or remote.
+    ActivateOutput(OutIdx),
+    /// Deactivate output of given ID - Local or remote
+    DeactivateOutput(OutIdx),
+}
+
 impl<const BN: usize> Executor<BN> {
     pub fn new(
         board: &'static Board,
@@ -90,14 +101,22 @@ impl<const BN: usize> Executor<BN> {
 
     /// Broadcast our output state change
     async fn emit_io_message(&mut self, out: OutIdx, final_state: bool) {
-        defmt::info!("Emiting IO message for output {} to state {} from executor", out, final_state);
+        defmt::info!(
+            "Emiting IO message for output {} to state {} from executor",
+            out,
+            final_state
+        );
 
         // TODO: I've mixed feeling about handling this in emit(). Move lower
         // and create emit_message and emit_io?
 
         let message = Message::OutputChanged {
             output: out,
-            state: if final_state { args::OutputChangeRequest::On } else { args::OutputChangeRequest::Off }
+            state: if final_state {
+                args::OutputChangeRequest::On
+            } else {
+                args::OutputChangeRequest::Off
+            },
         };
 
         // Transmit information over CAN.
@@ -107,18 +126,16 @@ impl<const BN: usize> Executor<BN> {
 
     /// Handle outputs from Executor: Emit two messages and change internal state.
     async fn alter_output(&mut self, command: IOCommand) {
-
         // Update local state
         let (result, out) = match &command {
-            IOCommand::ToggleOutput(out) => {
-                (self.board.toggle_output(*out).await, *out)
-            }
+            IOCommand::ToggleOutput(out) => (self.board.toggle_output(*out).await, *out),
             IOCommand::ActivateOutput(out) => {
                 (self.board.set_output(*out, true).await.map(|()| true), *out)
             }
-            IOCommand::DeactivateOutput(out) => {
-                (self.board.set_output(*out, false).await.map(|()| false), *out)
-            }
+            IOCommand::DeactivateOutput(out) => (
+                self.board.set_output(*out, false).await.map(|()| false),
+                *out,
+            ),
         };
 
         if let Ok(final_state) = result {
@@ -157,7 +174,6 @@ impl<const BN: usize> Executor<BN> {
         for exp in [&self.board.expander_sensors, &self.board.expander_switches] {
             let inputs = exp.get_inputs();
             if let Some(inputs) = inputs {
-
                 for (idx, state) in inputs {
                     let state = if state {
                         args::IOState::On
@@ -182,7 +198,10 @@ impl<const BN: usize> Executor<BN> {
                     self.interconnect.transmit_response(&message, true).await;
                     Timer::after(Duration::from_millis(1)).await;
                 }
-                defmt::info!("One of expanders does not respond. Dead: {:?}", exp.get_indices());
+                defmt::info!(
+                    "One of expanders does not respond. Dead: {:?}",
+                    exp.get_indices()
+                );
             }
         }
 
@@ -247,7 +266,8 @@ impl<const BN: usize> Executor<BN> {
                 self.alter_output(IOCommand::ActivateOutput(out_idx)).await;
             }
             Opcode::Deactivate(out_idx) => {
-                self.alter_output(IOCommand::DeactivateOutput(out_idx)).await;
+                self.alter_output(IOCommand::DeactivateOutput(out_idx))
+                    .await;
             }
 
             // Enable a layer (TODO: push layer onto a layer stack?)
@@ -337,20 +357,18 @@ impl<const BN: usize> Executor<BN> {
 
             Opcode::SendStatus => {
                 self.send_status().await;
-            }
-
-            // Hypothetical?
-            // Read input value (local) into register
-            /*
-                  Opcode::ReadInput(switch_id) => {
-              },
-                  /// Read input value (local) into register
-                  Opcode::ReadOutput(OutIdx) => {
-              },
-                  /// Call first if register is True, second one if False.
-                  Opcode::CallConditionally(proc_idx, proc_idx) => {
-              },
-             */
+            } // Hypothetical?
+              // Read input value (local) into register
+              /*
+                   Opcode::ReadInput(switch_id) => {
+               },
+                   /// Read input value (local) into register
+                   Opcode::ReadOutput(OutIdx) => {
+               },
+                   /// Call first if register is True, second one if False.
+                   Opcode::CallConditionally(proc_idx, proc_idx) => {
+               },
+              */
         }
         MicroState::Continue
     }
@@ -465,7 +483,8 @@ impl<const BN: usize> Executor<BN> {
                 self.alter_output(IOCommand::ActivateOutput(out_idx)).await;
             }
             Event::RemoteDeactivate(out_idx) => {
-                self.alter_output(IOCommand::DeactivateOutput(out_idx)).await;
+                self.alter_output(IOCommand::DeactivateOutput(out_idx))
+                    .await;
             }
             Event::RemoteStatusRequest => {
                 self.send_status().await;

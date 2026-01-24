@@ -47,8 +47,8 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
 
     pub fn get_all(&self) -> [(u8, bool); IN] {
         let mut status = [(0, false); IN];
-        for i in 0..IN {
-            status[i] = (self.indices[i], self.state[i]);
+        for (i, index) in self.indices.iter().enumerate() {
+            status[i] = (*index, self.state[i]);
         }
         status
     }

@@ -2,8 +2,7 @@
 /// Represents the Hardware. Pretty much everything in this file is static,
 /// initialized once and available through the lifetime of a program.
 ///
-use crate::boards::{common, io_router};
-use crate::buttonsmash::shutters;
+use crate::boards::common;
 use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_stm32::rtc::{DateTime, Rtc, RtcConfig, RtcError, RtcTimeProvider};
@@ -50,9 +49,6 @@ static STATUS: StaticCell<Status> = StaticCell::new();
 /// It's later consumed by EventConverter.
 static INPUT_CHANNEL: InputChannel = InputChannel::new();
 
-/// Queue of output-controlling events that are handled by IORouter.
-static OUTPUT_CHANNEL: io_router::OutputChannel = io_router::OutputChannel::new();
-
 /// Usb bidirectional comms
 static USB_UP: usb_connect::CommChannel = usb_connect::CommChannel::new();
 static USB_DOWN: usb_connect::CommChannel = usb_connect::CommChannel::new();
@@ -73,13 +69,10 @@ pub struct Board {
 
     /// Queue of input events (from expanders, native IOs, etc.)
     pub input_q: &'static InputChannel,
-    pub io_command_q: &'static io_router::OutputChannel,
 
     /// Physical outputs.
     indexed_outputs:
-        Mutex<NoopRawMutex,
-              IndexedOutputs<INDICES_N, 1, 8,
-                             ExpanderOutputs, Output<'static>>>,
+        Mutex<NoopRawMutex, IndexedOutputs<INDICES_N, 1, 8, ExpanderOutputs, Output<'static>>>,
     /// CAN communication between the layers.
     pub interconnect: Interconnect,
 
@@ -91,19 +84,18 @@ pub struct Board {
     /// On board RTC.
     pub rtc: Mutex<NoopRawMutex, Rtc>,
     pub time_provider: RtcTimeProvider,
-    pub shutters_channel: shutters::ShutterChannel,
 }
 
 impl Board {
-    pub fn init(spawner: &Spawner) -> Self {
+    pub fn init() -> Self {
         let config = common::config_stm32g4();
         let peripherals = embassy_stm32::init(config);
 
         common::ensure_boot0_configuration();
-        Self::assign_peripherals(peripherals, spawner)
+        Self::assign_peripherals(peripherals)
     }
 
-    pub fn assign_peripherals(p: embassy_stm32::Peripherals, spawner: &Spawner) -> Self {
+    pub fn assign_peripherals(p: embassy_stm32::Peripherals) -> Self {
         /* Basics */
         let led = Output::new(p.PC6, Level::Low, Speed::Low);
         let status = STATUS.init(Status::new(led));
@@ -188,9 +180,6 @@ impl Board {
         let (rtc, time_provider) = Rtc::new(p.RTC, RtcConfig::default());
 
         let usb_connect = usb_connect::UsbConnect::new(p.USB, p.PA12, p.PA11);
-        let smngr = shutters::Manager::new(&OUTPUT_CHANNEL);
-        let shutters_channel: shutters::ShutterChannel =
-            ector::actor!(spawner, shutters, shutters::Manager, smngr).into();
 
         info!("Board initialized");
         Self {
@@ -205,8 +194,6 @@ impl Board {
             rtc: Mutex::new(rtc),
             time_provider,
             input_q: &INPUT_CHANNEL,
-            io_command_q: &OUTPUT_CHANNEL,
-            shutters_channel,
         }
     }
 
@@ -220,7 +207,6 @@ impl Board {
     pub fn spawn_io_tasks(&'static self, spawner: &Spawner) {
         spawner.spawn(unwrap!(task_expander_inputs(&self.expander_switches)));
         spawner.spawn(unwrap!(task_expander_inputs(&self.expander_sensors)));
-        spawner.spawn(unwrap!(io_router::task_io_router(self, self.io_command_q)));
     }
 
     pub async fn set_output(&self, idx: IoIdx, state: bool) -> Result<(), ()> {

@@ -69,8 +69,8 @@ mod msg_type {
 }
 
 pub mod args {
-    pub use crate::io::events::Trigger;
     use super::{InIdx, OutIdx};
+    pub use crate::io::events::Trigger;
 
     #[derive(Clone, Copy, defmt::Format)]
     #[repr(u16)]
@@ -451,7 +451,7 @@ impl Message {
                     args::IOType::Input(idx) => {
                         raw.data[0] = *idx;
                         raw.data[1] = 0;
-                    },
+                    }
                     args::IOType::Output(idx) => {
                         raw.data[0] = *idx;
                         raw.data[1] = 1;
@@ -504,7 +504,7 @@ impl Message {
             Message::MicrocodeUpdateAck { length } => todo!(),
             */
             Message::TriggerInput { .. }
-            | Message::RequestStatus { .. }
+            | Message::RequestStatus
             | Message::TimeAnnouncement { .. } => {
                 panic!("Not implemented method requested");
             }

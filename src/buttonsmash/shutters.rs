@@ -8,7 +8,7 @@ use ector;
 use embassy_futures::select::{Either, select};
 use embassy_time::{Duration, Instant, Timer};
 
-use crate::boards::{IOCommand, OutputChannel};
+use crate::boards::ctrl_board_v1::Board;
 use crate::buttonsmash::consts::{OutIdx, ShutterIdx};
 use crate::config::MAX_SHUTTERS;
 
@@ -175,9 +175,9 @@ enum Action {
 }
 
 /// Single shutter parameters.
-pub struct Shutter<'a> {
+pub struct Shutter {
     /// Output channel for commands
-    output_channel: &'a OutputChannel,
+    board: &'static Board,
     /// Shutter config.
     cfg: Config,
     /// Current estimated shutter position.
@@ -191,7 +191,7 @@ pub struct Shutter<'a> {
     in_sync: bool,
 }
 
-impl Format for Shutter<'_> {
+impl Format for Shutter {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(
             fmt,
@@ -270,10 +270,10 @@ impl Position {
     }
 }
 
-impl<'a> Shutter<'a> {
-    pub fn new(up: OutIdx, down: OutIdx, output_channel: &'a OutputChannel) -> Self {
+impl Shutter {
+    pub fn new(up: OutIdx, down: OutIdx, board: &'static Board) -> Self {
         Self {
-            output_channel,
+            board,
             cfg: Config::new(up, down),
             position: Position::new_zero(),
             target: Position::new_zero(),
@@ -348,37 +348,29 @@ impl<'a> Shutter<'a> {
 
     /// Stop movement.
     async fn go_idle(&self) {
-        self.output_channel
-            .send(IOCommand::DeactivateOutput(self.cfg.up))
-            .await;
-
-        self.output_channel
-            .send(IOCommand::DeactivateOutput(self.cfg.down))
-            .await;
+        // Report error?
+        let _ = self.board.set_output(self.cfg.up, false).await;
+        let _ = self.board.set_output(self.cfg.down, false).await;
     }
 
     /// Start movement UP.
     async fn go_up(&self) {
         // NOTE: Should not be needed. Just for security.
-        self.output_channel
-            .send(IOCommand::DeactivateOutput(self.cfg.down))
-            .await;
-
-        self.output_channel
-            .send(IOCommand::ActivateOutput(self.cfg.up))
-            .await;
+        if self.board.set_output(self.cfg.down, false).await.is_err() {
+            // Security - don't enable if can't disable the other one.
+            return;
+        }
+        let _ = self.board.set_output(self.cfg.up, true).await;
     }
 
     /// Start movement DOWN.
     async fn go_down(&self) {
         // NOTE: Should not be needed. Just for security.
-        self.output_channel
-            .send(IOCommand::DeactivateOutput(self.cfg.up))
-            .await;
-
-        self.output_channel
-            .send(IOCommand::ActivateOutput(self.cfg.down))
-            .await;
+        if self.board.set_output(self.cfg.up, false).await.is_err() {
+            // Security - don't enable if can't disable the other one.
+            return;
+        }
+        let _ = self.board.set_output(self.cfg.down, true).await;
     }
 
     /// This is an universal state 'tick':
@@ -593,22 +585,22 @@ impl<'a> Shutter<'a> {
 }
 
 pub struct Manager {
-    shutters: [Shutter<'static>; MAX_SHUTTERS],
+    shutters: [Shutter; MAX_SHUTTERS],
 }
 
 impl Manager {
-    pub fn new(output_channel: &'static OutputChannel) -> Self {
+    pub fn new(board: &'static Board) -> Self {
         Self {
             shutters: [
                 // Shutters start unconfigured, and can later be set dynamically with commands.
-                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
-                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
-                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
-                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
-                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
-                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
-                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
-                Shutter::new(OutIdx::MAX, OutIdx::MAX, output_channel),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, board),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, board),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, board),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, board),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, board),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, board),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, board),
+                Shutter::new(OutIdx::MAX, OutIdx::MAX, board),
             ],
         }
     }
@@ -651,9 +643,13 @@ impl ector::Actor for Manager {
 }
 
 // How to build only when cfg test?
+/*
+
+After simplification and migration from output queue to simply calling Board the
+tests are invalid. I'd probably need a Board mock.
+
 pub mod tests {
     use super::*;
-    use crate::boards::OutputChannel;
 
     pub async fn single_shutter() {
         let channel = OutputChannel::new();
@@ -802,3 +798,4 @@ pub mod tests {
         assert!(channel.try_receive().is_err());
     }
 }
+*/

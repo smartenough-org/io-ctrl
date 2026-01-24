@@ -29,7 +29,7 @@ pub async fn main(spawner: Spawner) {
     defmt::info!("Preinit");
 
     // Create board peripherals (early init)
-    let board = BOARD.init(ctrl_board::Board::init(&spawner));
+    let board = BOARD.init(ctrl_board::Board::init());
 
     defmt::info!("Starting board");
 
@@ -40,6 +40,6 @@ pub async fn main(spawner: Spawner) {
     board.spawn_tasks(&spawner);
     board.spawn_io_tasks(&spawner);
 
-    let app = APP.init(CtrlApp::new(board).await);
-    app.main(&spawner).await;
+    let app = APP.init(CtrlApp::new(board, &spawner).await);
+    app.main().await;
 }

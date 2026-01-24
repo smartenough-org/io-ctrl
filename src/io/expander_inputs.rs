@@ -78,8 +78,8 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
         }
 
         let mut data: [(u8, bool); 16] = [(0, false); 16];
-        for pos in 0..16 {
-            data[pos] = (self.io_indices[pos], (input & (1 << pos)) != 0);
+        for (pos, index) in self.io_indices.iter().enumerate() {
+            data[pos] = (*index, (input & (1 << pos)) != 0);
         }
         Some(data)
     }

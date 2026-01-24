@@ -1,9 +1,10 @@
-use core::cell::UnsafeCell;
+use crate::buttonsmash::shutters;
 use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_stm32::rtc::{DateTime, DayOfWeek};
 use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
+use static_cell::StaticCell;
 
 use crate::boards::ctrl_board::Board;
 use crate::components::message::{Message, args};
@@ -16,27 +17,33 @@ use crate::io::event_converter::run_event_converter;
 
 /// High-level command queue that are consumed by executor.
 static EVENT_CHANNEL: EventChannel = EventChannel::new();
+static SHUTTERS_CHANNEL: StaticCell<shutters::ShutterChannel> = StaticCell::new();
 
 /// Main application/business logic entrypoint.
 pub struct CtrlApp {
     /// For all IO needs (and comm peripherals like CAN and USB)
     pub board: &'static Board,
-    executor: UnsafeCell<Executor<BINDINGS_COUNT>>,
 }
 
 impl CtrlApp {
-    pub async fn new(board: &'static Board) -> Self {
+    pub async fn new(board: &'static Board, spawner: &Spawner) -> Self {
+        let smngr = shutters::Manager::new(board);
+        let shutters_channel: shutters::ShutterChannel =
+            ector::actor!(spawner, shutters, shutters::Manager, smngr).into();
+
+        let shutters_channel = SHUTTERS_CHANNEL.init(shutters_channel);
+
         // TODO: Pass interconnect? Or a queue?
-        let mut executor = Executor::new(
-            board,
-            &board.interconnect,
-            &board.shutters_channel,
-        );
+        let mut executor = Executor::new(board, &board.interconnect, shutters_channel);
         Self::configure(&mut executor).await;
+
+        // let executor = unsafe { &mut *self.executor.get() };
+        spawner.spawn(unwrap!(task_pump_switch_events_to_microvm(executor)));
+        spawner.spawn(unwrap!(run_event_converter(board.input_q, &EVENT_CHANNEL)));
+        spawner.spawn(unwrap!(task_read_interconnect(board, shutters_channel)));
 
         Self {
             board,
-            executor: UnsafeCell::new(executor),
         }
     }
 
@@ -97,17 +104,7 @@ impl CtrlApp {
         executor.load_static(&program).await;
     }
 
-    fn spawn_tasks(&'static self, spawner: &Spawner) {
-        let executor = unsafe { &mut *self.executor.get() };
-        spawner.spawn(unwrap!(task_pump_switch_events_to_microvm(executor)));
-        spawner.spawn(unwrap!(run_event_converter(
-            self.board.input_q,
-            &EVENT_CHANNEL
-        )));
-        spawner.spawn(unwrap!(task_read_interconnect(self.board)));
-    }
-
-    pub async fn main(&'static mut self, spawner: &Spawner) -> ! {
+    pub async fn main(&'static mut self) -> ! {
         defmt::info!("Starting app on chip {}", uid::uid());
 
         let welcome_message = Message::Info {
@@ -119,9 +116,6 @@ impl CtrlApp {
             .interconnect
             .transmit_response(&welcome_message, false)
             .await;
-
-        // This might fail within tasks on i²c/CAN communication with expanders.
-        self.spawn_tasks(spawner);
 
         let mut cnt = 0;
         loop {
@@ -150,12 +144,15 @@ impl CtrlApp {
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_pump_switch_events_to_microvm(executor: &'static mut Executor<BINDINGS_COUNT>) {
+pub async fn task_pump_switch_events_to_microvm(mut executor: Executor<BINDINGS_COUNT>) {
     executor.listen_events(&EVENT_CHANNEL).await;
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_read_interconnect(board: &'static Board) {
+pub async fn task_read_interconnect(
+    board: &'static Board,
+    shutters_channel: &'static shutters::ShutterChannel,
+) {
     loop {
         let raw = board.interconnect.receive().await;
         defmt::info!("Received raw message {}", raw);
@@ -284,7 +281,7 @@ pub async fn task_read_interconnect(board: &'static Board) {
             }
             Message::ShutterCmd { shutter_idx, cmd } => {
                 defmt::warn!("Remote shutter cmd to {}: {:?}", shutter_idx, cmd);
-                board.shutters_channel.send((shutter_idx, cmd)).await;
+                shutters_channel.send((shutter_idx, cmd)).await;
             }
 
             Message::RequestStatus => {
