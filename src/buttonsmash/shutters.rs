@@ -24,6 +24,8 @@ const HYSTERESIS_TILT: u8 = 15;
 const COOLDOWN: Duration = Duration::from_millis(500);
 /// When in motion, how often should we report position change.
 const UPDATE_PERIOD: Duration = Duration::from_millis(1000);
+/// If completely nothing happens, how often?
+const NOOP_UPDATE_PERIOD: Duration = Duration::from_millis(10000);
 
 /// Internal commands handled by a shutter driver.
 #[derive(Format, PartialEq, Eq, Clone, Copy, Debug)]
@@ -161,8 +163,11 @@ pub struct Config {
 /// Internal state machine for changing state in asynchronous manner.
 #[derive(Format, Debug, Eq, PartialEq)]
 enum Action {
-    /// Nothing is happening
+    /// Nothing is happening. But maybe should start happening.
     Idle,
+
+    /// Nothing is happening and won't start happening by itself.
+    Sleep,
 
     /// Currently moving up since Instant to open or decrease tilt.
     Up(Instant),
@@ -277,7 +282,7 @@ impl Shutter {
             cfg: Config::new(up, down),
             position: Position::new_zero(),
             target: Position::new_zero(),
-            action: Action::Idle,
+            action: Action::Sleep,
             in_sync: false,
         }
     }
@@ -398,8 +403,9 @@ impl Shutter {
         // Step II: Check for finishing currently pending actions or starting
         // new ones.
         match &self.action {
-            Action::Idle => {
-                // We are inactive, and new action can be started.
+            Action::Idle | Action::Sleep => {
+                // We are inactive, maybe a new action can be started if target
+                // position is not reached yet.
                 let height_diff = self.target.height.abs_diff(self.position.height);
                 let tilt_diff = self.target.tilt.abs_diff(self.position.tilt);
 
@@ -433,9 +439,11 @@ impl Shutter {
                         Duration::from_secs(0)
                     }
                 } else {
-                    // Nothing is happening.
-                    info!("Idle -> Idle (10s)");
-                    Duration::from_secs(10)
+                    // Nothing is happening and won't until we get new command -
+                    // target position is reached.
+                    info!("Idle/Sleep -> Sleep (10s) {:?}", self);
+                    self.action = Action::Sleep;
+                    NOOP_UPDATE_PERIOD
                 }
             }
             Action::Cooldown(since) => {
@@ -494,7 +502,7 @@ impl Shutter {
     /// None if we are idle. We assume positions are already updated.
     async fn finish(&mut self, now: Instant) {
         match &self.action {
-            Action::Idle => {}
+            Action::Idle | Action::Sleep => {}
             Action::Cooldown(_) => { /* Update can finish a cooldown. We don't have to. */ }
             Action::Up(_) | Action::Down(_) => {
                 self.go_idle().await;
@@ -506,11 +514,15 @@ impl Shutter {
     // Initiate new movement.
     async fn set_target(&mut self, now: Instant, target: Position) -> Duration {
         match self.action {
+            Action::Sleep => {
+                // Wake us up, so update() will get called.
+                self.action = Action::Idle;
+            }
             Action::Idle => { /* Ok */ }
             Action::Cooldown(_) => { /* Ok */ }
             _ => {
                 panic!(
-                    "Go action called when we're active {:?}. Finish first.",
+                    "Set target with Go action called when we're active {:?}. Finish first.",
                     self.action
                 );
             }
@@ -574,7 +586,7 @@ impl Shutter {
                 tilt,
             },
             Cmd::SetIO(down_idx, up_idx) => {
-                assert_eq!(self.action, Action::Idle);
+                assert_eq!(self.action, Action::Sleep);
                 self.cfg.down = down_idx;
                 self.cfg.up = up_idx;
                 return;
@@ -617,14 +629,20 @@ impl ector::Actor for Manager {
     {
         loop {
             let now = Instant::now();
-            let mut min_duration = UPDATE_PERIOD;
+            let mut min_duration = NOOP_UPDATE_PERIOD;
             for shutter in self.shutters.iter_mut() {
-                let duration = shutter.update(now).await;
+                let duration = if shutter.action == Action::Sleep {
+                    NOOP_UPDATE_PERIOD
+                } else {
+                    shutter.update(now).await
+                };
                 if duration < min_duration {
                     min_duration = duration;
                 }
             }
-            defmt::info!("Will wait for {:?}", min_duration);
+            if min_duration != NOOP_UPDATE_PERIOD {
+                defmt::info!("Will wait for {:?} and revisit shutters", min_duration);
+            }
             let inbox_future = inbox.next();
             let max_time_future = Timer::after(min_duration);
             // TODO scan all and Determine earliest time of action.
