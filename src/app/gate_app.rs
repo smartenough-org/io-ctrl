@@ -4,6 +4,7 @@ use embassy_stm32::uid;
 use embassy_time::{Duration, Timer};
 
 use crate::boards::ctrl_board::Board;
+use crate::components::interconnect::WhenFull;
 use crate::components::{
     message::{Message, MessageRaw, args},
     status, usb_connect,
@@ -33,9 +34,10 @@ impl GateApp {
             arg: 0,
         };
 
+        // Gate can block because it makes no sense without working CAN.
         self.board
             .interconnect
-            .transmit_response(&welcome_message, true)
+            .transmit_response(&welcome_message, WhenFull::Block)
             .await;
 
         self.spawn_tasks(spawner);
@@ -104,6 +106,6 @@ pub async fn task_read_usb(board: &'static Board) {
             defmt::info!("Unable to parse message {:?}", raw)
         }
 
-        board.interconnect.transmit_standard(&raw, true).await;
+        board.interconnect.transmit_standard(&raw, WhenFull::Block).await;
     }
 }

@@ -5,6 +5,7 @@ use defmt::*;
 use embassy_stm32::can::{self, BufferedCanReceiver, BufferedCanSender};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
+use embassy_time::{Duration, Timer};
 use static_cell::StaticCell;
 
 use super::message::Message;
@@ -21,6 +22,15 @@ static TX_BUF: StaticCell<can::TxBuf<4>> = StaticCell::new();
 static RX_BUF: StaticCell<can::RxBuf<4>> = StaticCell::new();
 // I only keep this around so that can keeps working.
 static BUFFERED_CAN: StaticCell<embassy_stm32::can::BufferedCan<'static, 4, 4>> = StaticCell::new();
+
+pub enum WhenFull {
+    /// Output queue is full and can't immediately schedule message? Drop message.
+    Drop,
+    /// Output queue is full? Block until it's free. Might block indefinetely if CAN failed.
+    Block,
+    /// Wait a bit and retry, but don't block forever.
+    Wait,
+}
 
 impl Interconnect {
     pub fn new(mut can: can::CanConfigurator<'static>) -> Self {
@@ -107,7 +117,7 @@ impl Interconnect {
         }
     }
 
-    pub async fn transmit_standard(&self, raw: &MessageRaw, block: bool) {
+    pub async fn transmit_standard(&self, raw: &MessageRaw, when_full: WhenFull) -> bool {
         // RTR False
         let frame = raw.to_can_frame();
         defmt::debug!(
@@ -116,29 +126,58 @@ impl Interconnect {
             raw.to_can_addr(),
             frame
         );
-        let mut tx = self.can_tx.lock().await;
-        let ret = tx.try_write(frame);
+
+        // Happy path.
+        let ret = {
+            let mut tx = self.can_tx.lock().await;
+            tx.try_write(frame)
+        };
         if ret.is_err() {
             status::COUNTERS.can_queue_full.inc();
-            if !block {
-                defmt::warn!("Output CAN buffer is full - not blocking. Message will be dropped");
-            } else {
-                defmt::warn!("Output CAN buffer is full - will block and wait.");
-                let frame = raw.to_can_frame();
-                tx.write(frame).await;
+            match when_full {
+                WhenFull::Drop => {
+                    defmt::warn!("Output CAN buffer is full - not blocking. Message will be dropped");
+                    false
+                }
+                WhenFull::Block => {
+                    defmt::warn!("Output CAN buffer is full - will block and wait.");
+                    let frame = raw.to_can_frame();
+                    let mut tx = self.can_tx.lock().await;
+                    tx.write(frame).await;
+                    true
+                }
+                WhenFull::Wait => {
+                    // Longest frame should be under 150 bits with some stuffed
+                    // bits. With 250kbps that's 0.6ms transmission time. If the
+                    // CAN works at all, then within around 0.5ms we should be
+                    // able to store the new frame.
+                    for _ in 0..8 {
+                        defmt::info!("Wait & retry");
+                        Timer::after(Duration::from_millis(1)).await;
+                        let mut tx = self.can_tx.lock().await;
+                        let ret = tx.try_write(frame);
+                        if ret.is_ok() {
+                            return true;
+                        }
+                    }
+                    false
+                }
             }
+        } else {
+            defmt::info!("Message scheduled");
+            true
         }
     }
 
     /// Schedule transmission of a interconnect message - from this node.
     /// TODO: Nicer API than bool?
-    pub async fn transmit_response(&self, msg: &Message, block: bool) {
+    pub async fn transmit_response(&self, msg: &Message, when_full: WhenFull) -> bool {
         let raw = msg.to_raw(LOCAL_ADDRESS);
-        self.transmit_standard(&raw, block).await;
+        self.transmit_standard(&raw, when_full).await
     }
 
-    pub async fn transmit_request(&self, dst_addr: u8, msg: &Message, block: bool) {
+    pub async fn transmit_request(&self, dst_addr: u8, msg: &Message, when_full: WhenFull) -> bool {
         let raw = msg.to_raw(dst_addr);
-        self.transmit_standard(&raw, block).await;
+        self.transmit_standard(&raw, when_full).await
     }
 }

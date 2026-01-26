@@ -13,6 +13,7 @@ use super::consts::{
 };
 use super::{layers::Layers, opcodes::Opcode, shutters};
 use crate::boards::ctrl_board_v1::Board;
+use crate::components::interconnect::WhenFull;
 use crate::components::status;
 use crate::components::{
     interconnect::Interconnect,
@@ -121,7 +122,7 @@ impl<const BN: usize> Executor<BN> {
 
         // Transmit information over CAN.
         // In case of broken CAN communication this will be ignored.
-        self.interconnect.transmit_response(&message, false).await;
+        self.interconnect.transmit_response(&message, WhenFull::Drop).await;
     }
 
     /// Handle outputs from Executor: Emit two messages and change internal state.
@@ -163,7 +164,7 @@ impl<const BN: usize> Executor<BN> {
             };
             // Transmit information over CAN.
             defmt::info!("Sent status message {:?}", message);
-            self.interconnect.transmit_response(&message, false).await;
+            self.interconnect.transmit_response(&message, WhenFull::Wait).await;
 
             // Don't block on CAN in case it died (we are alone on bus for
             // example), but give it some time to send. On 250kBps frame should
@@ -186,8 +187,7 @@ impl<const BN: usize> Executor<BN> {
                     };
                     // Transmit information over CAN.
                     defmt::info!("Sent status input message {:?}", message);
-                    self.interconnect.transmit_response(&message, true).await;
-                    Timer::after(Duration::from_millis(1)).await;
+                    self.interconnect.transmit_response(&message, WhenFull::Wait).await;
                 }
             } else {
                 for idx in exp.get_indices() {
@@ -195,8 +195,7 @@ impl<const BN: usize> Executor<BN> {
                         io: args::IOType::Input(*idx),
                         state: args::IOState::Error,
                     };
-                    self.interconnect.transmit_response(&message, true).await;
-                    Timer::after(Duration::from_millis(1)).await;
+                    self.interconnect.transmit_response(&message, WhenFull::Wait).await;
                 }
                 defmt::info!(
                     "One of expanders does not respond. Dead: {:?}",

@@ -1,4 +1,5 @@
 use crate::buttonsmash::shutters;
+use crate::components::interconnect::WhenFull;
 use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_stm32::rtc::{DateTime, DayOfWeek};
@@ -114,7 +115,7 @@ impl CtrlApp {
 
         self.board
             .interconnect
-            .transmit_response(&welcome_message, false)
+            .transmit_response(&welcome_message, WhenFull::Wait)
             .await;
 
         let mut cnt = 0;
@@ -298,7 +299,7 @@ pub async fn task_read_interconnect(
                 }
                 let msg = Message::Pong { body };
                 // NOTE: Should this be blocking? We just got message so CAN should be operational.
-                board.interconnect.transmit_response(&msg, true).await;
+                board.interconnect.transmit_response(&msg, WhenFull::Wait).await;
             }
 
             // Those are not required on endpoints.
