@@ -198,7 +198,8 @@ impl<const BN: usize> Executor<BN> {
                     self.interconnect.transmit_response(&message, WhenFull::Wait).await;
                 }
                 defmt::info!(
-                    "One of expanders does not respond. Dead: {:?}",
+                    "Expander id={} does not respond. Dead: {:?}",
+                    exp.get_id(),
                     exp.get_indices()
                 );
             }
@@ -470,6 +471,14 @@ impl<const BN: usize> Executor<BN> {
                 } else {
                     defmt::info!("Not found binding {:?}!", data);
                 }
+
+                // Now, since the local (fast) action is executed, broadcast the
+                // input change.
+                let msg = Message::InputChanged {
+                    input: data.switch_id,
+                    trigger: data.trigger
+                };
+                self.interconnect.transmit_response(&msg, WhenFull::Wait).await;
             }
             // Remote call over Interconnect.
             Event::RemoteProcedureCall(proc_idx) => {

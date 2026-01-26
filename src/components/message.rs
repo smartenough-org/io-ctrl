@@ -29,7 +29,7 @@ mod msg_type {
     /// My output was changed, because of reasons.
     pub const OUTPUT_CHANGED: u8 = 0x04;
     /// My input was changed.
-    pub const INPUT_TRIGGERED: u8 = 0x05;
+    pub const INPUT_CHANGED: u8 = 0x05;
 
     /// Set output X to Y (or invert state)
     pub const SET_OUTPUT: u8 = 0x08;
@@ -192,7 +192,7 @@ pub enum Message {
     },
 
     /// My input was changed.
-    InputTriggered { input: InIdx },
+    InputChanged { input: InIdx, trigger: args::Trigger },
 
     /// Request output change.
     /// 0 - deactivate, 1 - activate, 2 - toggle, * reserved (eg. time-limited setting)
@@ -400,7 +400,7 @@ impl Message {
                 None
             }
 
-            msg_type::OUTPUT_CHANGED | msg_type::INPUT_TRIGGERED => {
+            msg_type::OUTPUT_CHANGED | msg_type::INPUT_CHANGED => {
                 defmt::info!("Ignoring output/input change message {:?}", raw);
                 None
             }
@@ -459,10 +459,11 @@ impl Message {
                 }
                 raw.data[2] = state.to_bytes();
             }
-            Message::InputTriggered { input } => {
-                raw.msg_type = msg_type::INPUT_TRIGGERED;
-                raw.length = 1;
+            Message::InputChanged { input, trigger } => {
+                raw.msg_type = msg_type::INPUT_CHANGED;
+                raw.length = 2;
                 raw.data[0] = *input; // ? More?
+                raw.data[1] = trigger.to_bytes();
             }
             Message::CallProcedure { proc_id } => {
                 raw.msg_type = msg_type::CALL_PROC;

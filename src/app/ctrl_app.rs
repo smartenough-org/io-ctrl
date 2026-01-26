@@ -307,7 +307,7 @@ pub async fn task_read_interconnect(
             | Message::Info { .. }
             | Message::OutputChanged { .. }
             | Message::StatusIO { .. }
-            | Message::InputTriggered { .. }
+            | Message::InputChanged { .. }
             | Message::Pong { .. }
             | Message::Status { .. } => {
                 if to_us {
