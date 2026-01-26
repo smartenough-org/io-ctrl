@@ -136,6 +136,7 @@ impl Board {
 
         let expander_switches = ExpanderInputs::new(
             io_ex_inputs,
+            0b111,
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
             &INPUT_CHANNEL,
             status,
@@ -144,6 +145,7 @@ impl Board {
 
         let expander_sensors = ExpanderInputs::new(
             io_sensors,
+            0b110,
             [
                 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
             ],
@@ -276,7 +278,7 @@ impl Board {
     }
 }
 
-#[embassy_executor::task]
+#[embassy_executor::task(pool_size=3)]
 pub async fn task_expander_inputs(switches: &'static ExpanderInputs) {
     switches.run().await;
 }

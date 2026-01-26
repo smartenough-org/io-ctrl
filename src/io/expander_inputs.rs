@@ -14,6 +14,9 @@ pub struct ExpanderInputs<BUS: I2c> {
     /// Indices of connected PINs
     io_indices: [IoIdx; 16],
 
+    /// Expander address for identification
+    id: u8,
+
     /// shared i2c bus
     expander: RefCell<Pcf8575<BUS>>,
 
@@ -39,6 +42,7 @@ pub struct ExpanderInputs<BUS: I2c> {
 impl<BUS: I2c> ExpanderInputs<BUS> {
     pub fn new(
         expander: Pcf8575<BUS>,
+        id: u8,
         io_indices: [IoIdx; 16],
         queue: &'static InputChannel,
         status: &'static Status,
@@ -47,6 +51,7 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
         Self {
             io_indices,
             expander: RefCell::new(expander),
+            id,
             queue,
             errors: AtomicU16::new(0),
             expander_online: AtomicBool::new(false),
@@ -69,6 +74,10 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
 
     pub fn get_indices(&self) -> &[u8; 16] {
         &self.io_indices
+    }
+
+    pub fn get_id(&self) -> u8 {
+        self.id
     }
 
     pub fn get_inputs(&self) -> Option<[(u8, bool); 16]> {
@@ -112,9 +121,9 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                         status::COUNTERS.expander_input_error.inc();
                         self.status.is_warning();
                         let errs = self.errors.fetch_add(1, Ordering::Relaxed);
-                        defmt::error!("Unable to configure expander. Errors={}", errs);
+                        defmt::error!("Unable to configure expander {}. Errors={}", self.id, errs);
                         if errs > 60 {
-                            defmt::panic!("Expander connection seems dead after {} errors", errs);
+                            defmt::panic!("Expander {} connection seems dead after {} errors", self.id, errs);
                         }
                     }
                     self.expander_online.store(false, Ordering::Relaxed);
@@ -146,9 +155,9 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                 if self.required {
                     status::COUNTERS.expander_input_error.inc();
                     self.status.is_warning();
-                    defmt::error!("Unable to read expander. Errors={}", errs);
+                    defmt::error!("Unable to read expander {}. Errors={}", self.id, errs);
                     if errs > 60 {
-                        defmt::panic!("Expander connection seems dead after {} errors", errs);
+                        defmt::panic!("Expander {} connection seems dead after {} errors", self.id, errs);
                     }
                 }
                 continue;
@@ -164,7 +173,7 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                     match (*entry).cmp(&MIN_TIME) {
                         core::cmp::Ordering::Equal => {
                             /* Just activated */
-                            defmt::info!("ACTIVATED {}", pos);
+                            defmt::info!("ACTIVATED id{} pos{}", self.id, pos);
                             self.transmit(events::SwitchEvent {
                                 switch_id: self.io_indices[pos],
                                 state: events::SwitchState::Activated,
@@ -182,14 +191,14 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                         }
                         _ => {
                             /* Not yet active */
-                            defmt::info!("active level state idx={} state={}", pos, entry);
+                            defmt::info!("active level state id={} idx={} state={}", self.id, pos, entry);
                         }
                     }
                 } else {
                     if *entry >= MIN_TIME {
                         /* Was active, now it just got deactivated */
                         let time_active = LOOP_WAIT_MS * (*entry as u32);
-                        defmt::info!("DEACTIVATED {} after {}ms", pos, time_active);
+                        defmt::info!("DEACTIVATED id{} pos{} after {}ms", self.id, pos, time_active);
                         self.transmit(events::SwitchEvent {
                             switch_id: self.io_indices[pos],
                             state: events::SwitchState::Deactivated(time_active),
