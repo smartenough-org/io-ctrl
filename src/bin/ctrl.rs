@@ -40,6 +40,9 @@ pub async fn main(spawner: Spawner) {
     board.spawn_tasks(&spawner);
     board.spawn_io_tasks(&spawner);
 
-    let app = APP.init(CtrlApp::new(board, &spawner).await);
+    let app = APP.init(CtrlApp::new(board, &spawner));
+
+    app.configure().await;
+    app.spawn_tasks(&spawner);
     app.main().await;
 }

@@ -48,10 +48,10 @@ embassy-usb = { version = "0.5.1", features = ["defmt", "max-interface-count-3"]
 static_cell = { version = "2.1.1" }
 
 defmt = "1.0.1"
-rtt-target = { version = "0.6", features = ["defmt"] }
+rtt-target = { version = "0.6.2", features = ["defmt"] }
 
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
-cortex-m-rt = "0.7"
+cortex-m-rt = "0.7.5"
 panic-probe = { version = "1.0.0", features = ["print-rtt"] }
 futures = { version = "0.3.31", default-features = false, features = ["async-await"] }
 
@@ -105,3 +105,4 @@ debug-assertions = true # <-
 incremental = false
 opt-level = "s" # <-
 overflow-checks = true # <-
+lto = 'fat'

@@ -200,8 +200,9 @@ impl Format for Shutter {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(
             fmt,
-            "Shutter {{pos={:?} target={:?} action={:?}}}",
-            self.position,
+            "Shutter {{height={} tilt={} target={:?} action={:?}}}",
+            self.position.height,
+            self.position.tilt,
             self.target,
             self.action
         );

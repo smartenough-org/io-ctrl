@@ -487,10 +487,12 @@ dependencies = [
 name = "embassy-usb"
 version = "0.5.1"
 dependencies = [
+ "bitflags 2.10.0",
  "defmt 1.0.1",
  "embassy-futures",
  "embassy-net-driver-channel",
  "embassy-sync",
+ "embassy-time",
  "embassy-usb-driver",
  "embedded-io-async",
  "heapless 0.8.0",
@@ -1167,8 +1169,7 @@ dependencies = [
 [[package]]
 name = "stm32-metapac"
 version = "19.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a411079520dbccc613af73172f944b7cf97ba84e3bd7381a0352b6ec7bfef03b"
+source = "git+https://github.com/embassy-rs/stm32-data-generated?tag=stm32-data-7939779bbf5bf689c5f5e3d46ea6442eec5a8cf6#02e8216f2aaba91cde03ec2920ad20d4083c6462"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",

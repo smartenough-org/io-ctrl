@@ -1,4 +1,5 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
+linker = "flip-link"
 # replace nRF82840_xxAA with your chip as listed in `probe-rs chip list`
 # Can try probe-rs after 0.19 again.
 runner = "probe-rs run --chip STM32G431CBUx --preverify --log-file /dev/null"

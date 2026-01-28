@@ -47,7 +47,6 @@ pub struct Executor<const BINDINGS: usize, const OPCODES: usize = 1024> {
 
     // Our outputs
     board: &'static Board,
-    interconnect: &'static Interconnect,
     shutters: &'static shutters::ShutterChannel,
 }
 
@@ -75,7 +74,6 @@ pub enum IOCommand {
 impl<const BN: usize> Executor<BN> {
     pub fn new(
         board: &'static Board,
-        interconnect: &'static Interconnect,
         shutters_addr: &'static shutters::ShutterChannel,
     ) -> Self {
         Self {
@@ -85,7 +83,6 @@ impl<const BN: usize> Executor<BN> {
             procedures: [0; MAX_PROCEDURES],
             state: BoardState::default(),
             board,
-            interconnect,
             shutters: shutters_addr,
         }
     }
@@ -122,7 +119,7 @@ impl<const BN: usize> Executor<BN> {
 
         // Transmit information over CAN.
         // In case of broken CAN communication this will be ignored.
-        self.interconnect.transmit_response(&message, WhenFull::Drop).await;
+        self.board.interconnect.transmit_response(&message, WhenFull::Drop).await;
     }
 
     /// Handle outputs from Executor: Emit two messages and change internal state.
@@ -164,7 +161,7 @@ impl<const BN: usize> Executor<BN> {
             };
             // Transmit information over CAN.
             defmt::info!("Sent status message {:?}", message);
-            self.interconnect.transmit_response(&message, WhenFull::Wait).await;
+            self.board.interconnect.transmit_response(&message, WhenFull::Wait).await;
 
             // Don't block on CAN in case it died (we are alone on bus for
             // example), but give it some time to send. On 250kBps frame should
@@ -187,7 +184,7 @@ impl<const BN: usize> Executor<BN> {
                     };
                     // Transmit information over CAN.
                     defmt::info!("Sent status input message {:?}", message);
-                    self.interconnect.transmit_response(&message, WhenFull::Wait).await;
+                    self.board.interconnect.transmit_response(&message, WhenFull::Wait).await;
                 }
             } else {
                 for idx in exp.get_indices() {
@@ -195,7 +192,7 @@ impl<const BN: usize> Executor<BN> {
                         io: args::IOType::Input(*idx),
                         state: args::IOState::Error,
                     };
-                    self.interconnect.transmit_response(&message, WhenFull::Wait).await;
+                    self.board.interconnect.transmit_response(&message, WhenFull::Wait).await;
                 }
                 defmt::info!(
                     "Expander id={} does not respond. Dead: {:?}",
@@ -478,7 +475,7 @@ impl<const BN: usize> Executor<BN> {
                     input: data.switch_id,
                     trigger: data.trigger
                 };
-                self.interconnect.transmit_response(&msg, WhenFull::Wait).await;
+                self.board.interconnect.transmit_response(&msg, WhenFull::Wait).await;
             }
             // Remote call over Interconnect.
             Event::RemoteProcedureCall(proc_idx) => {

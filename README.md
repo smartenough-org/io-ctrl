@@ -45,5 +45,7 @@ Building firmware
 - Devices differ in their address (and maybe some functions later), pass
   appropriate feature during build, eg.:
 
+      cargo install flip-link
+      cargo install probe-rs-tools
       cargo build --release --bin ctrl --features bus-addr-1
       cargo build --release --bin gate --features bus-addr-gate

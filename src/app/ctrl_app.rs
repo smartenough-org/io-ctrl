@@ -19,39 +19,47 @@ use crate::io::event_converter::run_event_converter;
 /// High-level command queue that are consumed by executor.
 static EVENT_CHANNEL: EventChannel = EventChannel::new();
 static SHUTTERS_CHANNEL: StaticCell<shutters::ShutterChannel> = StaticCell::new();
+static EXECUTOR: StaticCell<Executor<BINDINGS_COUNT>> = StaticCell::new();
 
 /// Main application/business logic entrypoint.
 pub struct CtrlApp {
     /// For all IO needs (and comm peripherals like CAN and USB)
     pub board: &'static Board,
+    pub shutters: shutters::ShutterChannel,
+    pub executor: Option<&'static mut Executor<BINDINGS_COUNT>>,
 }
 
 impl CtrlApp {
-    pub async fn new(board: &'static Board, spawner: &Spawner) -> Self {
-        let smngr = shutters::Manager::new(board);
+    /// Create CtrlApp as much as you can, but watchout for growing too large.
+    /// When used with .awaits, the future grew once to 5kB. That's why it's
+    /// split currently between new, configure, spawn_tasks and uses statics.
+    pub fn new(board: &'static Board, spawner: &Spawner) -> Self {
         let shutters_channel: shutters::ShutterChannel =
-            ector::actor!(spawner, shutters, shutters::Manager, smngr).into();
+            ector::actor!(spawner, shutters, shutters::Manager, shutters::Manager::new(board)).into();
 
         let shutters_channel = SHUTTERS_CHANNEL.init(shutters_channel);
-
-        // TODO: Pass interconnect? Or a queue?
-        let mut executor = Executor::new(board, &board.interconnect, shutters_channel);
-        Self::configure(&mut executor).await;
-
-        // let executor = unsafe { &mut *self.executor.get() };
-        spawner.spawn(unwrap!(task_pump_switch_events_to_microvm(executor)));
-        spawner.spawn(unwrap!(run_event_converter(board.input_q, &EVENT_CHANNEL)));
-        spawner.spawn(unwrap!(task_read_interconnect(board, shutters_channel)));
-
+        let executor = EXECUTOR.init(Executor::new(board, shutters_channel));
         Self {
             board,
+            executor: Some(executor),
+            shutters: shutters_channel.clone(),
         }
+    }
+
+    pub fn spawn_tasks(&mut self, spawner: &Spawner) {
+        // let executor = unsafe { &mut *self.executor.get() };
+        let executor = self.executor
+            .take()
+            .expect("This needs to be defined");
+        spawner.spawn(unwrap!(task_pump_switch_events_to_microvm(executor)));
+        spawner.spawn(unwrap!(run_event_converter(self.board.input_q, &EVENT_CHANNEL)));
+        spawner.spawn(unwrap!(task_read_interconnect(self.board, self.shutters.clone())));
     }
 
     /// Returns hard-configured Executor. TODO: This is temporary. Code should
     /// be programmable and read from flash on start.
-    async fn configure(executor: &mut Executor<BINDINGS_COUNT>) {
-        let program = [
+    pub async fn configure(&mut self) {
+        const PROGRAM: [Opcode; 30] = [
             // Setup proc.
             Opcode::Start(0),
             // Basic usable program for initial setup.
@@ -102,7 +110,11 @@ impl CtrlApp {
             Opcode::Stop,
         ];
 
-        executor.load_static(&program).await;
+        let executor = self.executor
+            .take()
+            .expect("This needs to be defined");
+        executor.load_static(&PROGRAM).await;
+        self.executor = Some(executor);
     }
 
     pub async fn main(&'static mut self) -> ! {
@@ -113,10 +125,11 @@ impl CtrlApp {
             arg: 0,
         };
 
-        self.board
-            .interconnect
+        if !self.board.interconnect
             .transmit_response(&welcome_message, WhenFull::Wait)
-            .await;
+            .await {
+            defmt::info!("Unable to schedule sent of initial CAN message");
+        }
 
         let mut cnt = 0;
         loop {
@@ -145,14 +158,14 @@ impl CtrlApp {
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_pump_switch_events_to_microvm(mut executor: Executor<BINDINGS_COUNT>) {
+pub async fn task_pump_switch_events_to_microvm(executor: &'static mut Executor<BINDINGS_COUNT>) {
     executor.listen_events(&EVENT_CHANNEL).await;
 }
 
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_read_interconnect(
     board: &'static Board,
-    shutters_channel: &'static shutters::ShutterChannel,
+    shutters_channel: shutters::ShutterChannel,
 ) {
     loop {
         let raw = board.interconnect.receive().await;
