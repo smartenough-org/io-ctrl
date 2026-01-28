@@ -192,7 +192,10 @@ pub enum Message {
     },
 
     /// My input was changed.
-    InputChanged { input: InIdx, trigger: args::Trigger },
+    InputChanged {
+        input: InIdx,
+        trigger: args::Trigger,
+    },
 
     /// Request output change.
     /// 0 - deactivate, 1 - activate, 2 - toggle, * reserved (eg. time-limited setting)

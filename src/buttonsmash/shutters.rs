@@ -631,15 +631,22 @@ impl ector::Actor for Manager {
         loop {
             let now = Instant::now();
             let mut min_duration = NOOP_UPDATE_PERIOD;
+            let mut all_sleep = true;
             for shutter in self.shutters.iter_mut() {
                 let duration = if shutter.action == Action::Sleep {
                     NOOP_UPDATE_PERIOD
                 } else {
+                    all_sleep = false;
                     shutter.update(now).await
                 };
                 if duration < min_duration {
                     min_duration = duration;
                 }
+            }
+            if !all_sleep && min_duration > UPDATE_PERIOD {
+                // When something is happening the minimal state-update time is
+                // UPDATE_PERIOD.
+                min_duration = UPDATE_PERIOD;
             }
             if min_duration != NOOP_UPDATE_PERIOD {
                 defmt::info!("Will wait for {:?} and revisit shutters", min_duration);

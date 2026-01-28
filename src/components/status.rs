@@ -51,6 +51,8 @@ pub struct Counters {
     pub can_frame_error: Counter,
     /// Output CAN queue is full.
     pub can_queue_full: Counter,
+    /// Output CAN queue was full and we either dropped message immediately or waited and dropped.
+    pub can_drop: Counter,
 }
 
 pub static COUNTERS: Counters = Counters {
@@ -60,6 +62,7 @@ pub static COUNTERS: Counters = Counters {
     expander_output_error: Counter::new(),
     can_frame_error: Counter::new(),
     can_queue_full: Counter::new(),
+    can_drop: Counter::new(),
 };
 
 impl Counters {
@@ -71,6 +74,7 @@ impl Counters {
             || self.expander_output_error.get() > 0
             || self.can_frame_error.get() > 0
             || self.can_queue_full.get() > 0
+            || self.can_drop.get() > 0
     }
 }
 

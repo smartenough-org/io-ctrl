@@ -2,10 +2,9 @@ use crate::components::status::{self, Status};
 use crate::io::events::{self, InputChannel, IoIdx};
 use crate::io::pcf8575::Pcf8575;
 use core::sync::atomic::AtomicBool;
-use core::{
-    cell::RefCell,
-    sync::atomic::{AtomicU16, Ordering},
-};
+use core::sync::atomic::{AtomicU16, Ordering};
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c::I2c;
 
@@ -18,7 +17,7 @@ pub struct ExpanderInputs<BUS: I2c> {
     id: u8,
 
     /// shared i2c bus
-    expander: RefCell<Pcf8575<BUS>>,
+    expander: Mutex<NoopRawMutex, Pcf8575<BUS>>,
 
     // We output events into this queue.
     queue: &'static InputChannel,
@@ -50,7 +49,7 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
     ) -> Self {
         Self {
             io_indices,
-            expander: RefCell::new(expander),
+            expander: Mutex::new(expander),
             id,
             queue,
             errors: AtomicU16::new(0),
@@ -100,7 +99,7 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
          * watch for LOW state which is active.
          */
         let mut initialized = false;
-        let mut expander = self.expander.borrow_mut();
+        let mut expander = self.expander.lock().await;
 
         defmt::info!("Starting expander scanning loop");
 
@@ -123,7 +122,11 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                         let errs = self.errors.fetch_add(1, Ordering::Relaxed);
                         defmt::error!("Unable to configure expander {}. Errors={}", self.id, errs);
                         if errs > 60 {
-                            defmt::panic!("Expander {} connection seems dead after {} errors", self.id, errs);
+                            defmt::panic!(
+                                "Expander {} connection seems dead after {} errors",
+                                self.id,
+                                errs
+                            );
                         }
                     }
                     self.expander_online.store(false, Ordering::Relaxed);
@@ -157,7 +160,11 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                     self.status.is_warning();
                     defmt::error!("Unable to read expander {}. Errors={}", self.id, errs);
                     if errs > 60 {
-                        defmt::panic!("Expander {} connection seems dead after {} errors", self.id, errs);
+                        defmt::panic!(
+                            "Expander {} connection seems dead after {} errors",
+                            self.id,
+                            errs
+                        );
                     }
                 }
                 continue;
@@ -191,14 +198,24 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                         }
                         _ => {
                             /* Not yet active */
-                            defmt::info!("active level state id={} idx={} state={}", self.id, pos, entry);
+                            defmt::info!(
+                                "active level state id={} idx={} state={}",
+                                self.id,
+                                pos,
+                                entry
+                            );
                         }
                     }
                 } else {
                     if *entry >= MIN_TIME {
                         /* Was active, now it just got deactivated */
                         let time_active = LOOP_WAIT_MS * (*entry as u32);
-                        defmt::info!("DEACTIVATED id{} pos{} after {}ms", self.id, pos, time_active);
+                        defmt::info!(
+                            "DEACTIVATED id{} pos{} after {}ms",
+                            self.id,
+                            pos,
+                            time_active
+                        );
                         self.transmit(events::SwitchEvent {
                             switch_id: self.io_indices[pos],
                             state: events::SwitchState::Deactivated(time_active),

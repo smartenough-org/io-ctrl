@@ -120,12 +120,6 @@ impl Interconnect {
     pub async fn transmit_standard(&self, raw: &MessageRaw, when_full: WhenFull) -> bool {
         // RTR False
         let frame = raw.to_can_frame();
-        defmt::debug!(
-            "CAN TX: Transmitting {:?} {:#02x} {:?}",
-            raw,
-            raw.to_can_addr(),
-            frame
-        );
 
         // Happy path.
         let ret = {
@@ -136,7 +130,10 @@ impl Interconnect {
             status::COUNTERS.can_queue_full.inc();
             match when_full {
                 WhenFull::Drop => {
-                    defmt::warn!("Output CAN buffer is full - not blocking. Message will be dropped");
+                    defmt::warn!(
+                        "Output CAN buffer is full - not blocking. Message will be dropped"
+                    );
+                    status::COUNTERS.can_drop.inc();
                     false
                 }
                 WhenFull::Block => {
@@ -151,20 +148,23 @@ impl Interconnect {
                     // bits. With 250kbps that's 0.6ms transmission time. If the
                     // CAN works at all, then within around 0.5ms we should be
                     // able to store the new frame.
+                    let mut wait_time = 1;
                     for _ in 0..8 {
-                        defmt::info!("Wait & retry");
-                        Timer::after(Duration::from_millis(1)).await;
+                        Timer::after(Duration::from_micros(600 + wait_time * 500)).await;
                         let mut tx = self.can_tx.lock().await;
                         let ret = tx.try_write(frame);
                         if ret.is_ok() {
                             return true;
                         }
+                        wait_time += 1;
                     }
+                    defmt::error!("Dropping CAN message after waiting {:?}", frame);
+                    status::COUNTERS.can_drop.inc();
                     false
                 }
             }
         } else {
-            defmt::info!("Message scheduled");
+            defmt::info!("Message to {:#02x} scheduled {:?}", raw.to_can_addr(), raw);
             true
         }
     }

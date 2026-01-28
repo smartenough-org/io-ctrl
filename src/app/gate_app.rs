@@ -106,6 +106,9 @@ pub async fn task_read_usb(board: &'static Board) {
             defmt::info!("Unable to parse message {:?}", raw)
         }
 
-        board.interconnect.transmit_standard(&raw, WhenFull::Block).await;
+        board
+            .interconnect
+            .transmit_standard(&raw, WhenFull::Block)
+            .await;
     }
 }

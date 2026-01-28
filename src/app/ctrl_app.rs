@@ -18,7 +18,6 @@ use crate::io::event_converter::run_event_converter;
 
 /// High-level command queue that are consumed by executor.
 static EVENT_CHANNEL: EventChannel = EventChannel::new();
-static SHUTTERS_CHANNEL: StaticCell<shutters::ShutterChannel> = StaticCell::new();
 static EXECUTOR: StaticCell<Executor<BINDINGS_COUNT>> = StaticCell::new();
 
 /// Main application/business logic entrypoint.
@@ -34,32 +33,37 @@ impl CtrlApp {
     /// When used with .awaits, the future grew once to 5kB. That's why it's
     /// split currently between new, configure, spawn_tasks and uses statics.
     pub fn new(board: &'static Board, spawner: &Spawner) -> Self {
-        let shutters_channel: shutters::ShutterChannel =
-            ector::actor!(spawner, shutters, shutters::Manager, shutters::Manager::new(board)).into();
+        let shutters_channel: shutters::ShutterChannel = ector::actor!(
+            spawner,
+            shutters,
+            shutters::Manager,
+            shutters::Manager::new(board)
+        )
+        .into();
 
-        let shutters_channel = SHUTTERS_CHANNEL.init(shutters_channel);
         let executor = EXECUTOR.init(Executor::new(board, shutters_channel));
         Self {
             board,
             executor: Some(executor),
-            shutters: shutters_channel.clone(),
+            shutters: shutters_channel,
         }
     }
 
     pub fn spawn_tasks(&mut self, spawner: &Spawner) {
         // let executor = unsafe { &mut *self.executor.get() };
-        let executor = self.executor
-            .take()
-            .expect("This needs to be defined");
+        let executor = self.executor.take().expect("This needs to be defined");
         spawner.spawn(unwrap!(task_pump_switch_events_to_microvm(executor)));
-        spawner.spawn(unwrap!(run_event_converter(self.board.input_q, &EVENT_CHANNEL)));
-        spawner.spawn(unwrap!(task_read_interconnect(self.board, self.shutters.clone())));
+        spawner.spawn(unwrap!(run_event_converter(
+            self.board.input_q,
+            &EVENT_CHANNEL
+        )));
+        spawner.spawn(unwrap!(task_read_interconnect(self.board, self.shutters)));
     }
 
     /// Returns hard-configured Executor. TODO: This is temporary. Code should
     /// be programmable and read from flash on start.
     pub async fn configure(&mut self) {
-        const PROGRAM: [Opcode; 30] = [
+        const PROGRAM: [Opcode; 31] = [
             // Setup proc.
             Opcode::Start(0),
             // Basic usable program for initial setup.
@@ -110,9 +114,7 @@ impl CtrlApp {
             Opcode::Stop,
         ];
 
-        let executor = self.executor
-            .take()
-            .expect("This needs to be defined");
+        let executor = self.executor.take().expect("This needs to be defined");
         executor.load_static(&PROGRAM).await;
         self.executor = Some(executor);
     }
@@ -125,9 +127,12 @@ impl CtrlApp {
             arg: 0,
         };
 
-        if !self.board.interconnect
+        if !self
+            .board
+            .interconnect
             .transmit_response(&welcome_message, WhenFull::Wait)
-            .await {
+            .await
+        {
             defmt::info!("Unable to schedule sent of initial CAN message");
         }
 
@@ -312,7 +317,10 @@ pub async fn task_read_interconnect(
                 }
                 let msg = Message::Pong { body };
                 // NOTE: Should this be blocking? We just got message so CAN should be operational.
-                board.interconnect.transmit_response(&msg, WhenFull::Wait).await;
+                board
+                    .interconnect
+                    .transmit_response(&msg, WhenFull::Wait)
+                    .await;
             }
 
             // Those are not required on endpoints.

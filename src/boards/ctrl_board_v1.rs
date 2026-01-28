@@ -278,7 +278,7 @@ impl Board {
     }
 }
 
-#[embassy_executor::task(pool_size=2)]
+#[embassy_executor::task(pool_size = 2)]
 pub async fn task_expander_inputs(switches: &'static ExpanderInputs) {
     switches.run().await;
 }
