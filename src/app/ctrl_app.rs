@@ -103,13 +103,20 @@ impl CtrlApp {
             Opcode::BindShortToggle(1, 13),
             */
             Opcode::Stop,
-            // Test proc.
+
+            // Shutter control - Tilt.
             Opcode::Start(1),
+            Opcode::ShutterCmd(0, shutters::Cmd::TiltReverse),
+            Opcode::Stop,
+
+            // Test procedure 2
+            Opcode::Start(2),
             Opcode::Activate(100),
             Opcode::Activate(101),
             Opcode::Deactivate(110),
             Opcode::Stop,
-            Opcode::Start(2),
+            // Test procedure 3.
+            Opcode::Start(3),
             Opcode::Noop,
             Opcode::Stop,
         ];

@@ -352,17 +352,24 @@ impl<const BN: usize> Executor<BN> {
                 // NOTE: Layer deactivation is handled automatically and should
                 // not be bound.
             }
+
             Opcode::BindShutter(shutter_idx, down_idx, up_idx) => {
                 self.shutters
                     .send((shutter_idx, shutters::Cmd::SetIO(down_idx, up_idx)))
                     .await;
             }
 
+            Opcode::ShutterCmd(shutter_idx, shutter_cmd) => {
+                self.shutters.send((shutter_idx, shutter_cmd)).await;
+            }
+
             Opcode::SendStatus => {
                 self.send_status().await;
-            } // Hypothetical?
-              // Read input value (local) into register
-              /*
+            }
+
+            // Hypothetical?
+            // Read input value (local) into register
+            /*
                    Opcode::ReadInput(switch_id) => {
                },
                    /// Read input value (local) into register
@@ -419,6 +426,10 @@ impl<const BN: usize> Executor<BN> {
 
         for (idx, opcode) in self.opcodes.iter().enumerate() {
             if let Opcode::Start(proc_idx) = opcode {
+                let current = self.procedures[*proc_idx as usize];
+                if current != 0 && idx != 0 {
+                    defmt::warn!("Duplicate proc {}. Was at {} is also at {}", proc_idx, current, idx);
+                }
                 self.procedures[*proc_idx as usize] = idx;
             }
         }

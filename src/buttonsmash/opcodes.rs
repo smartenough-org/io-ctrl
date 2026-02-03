@@ -1,9 +1,12 @@
+use defmt::Format;
+
 use super::consts::{InIdx, LayerIdx, OutIdx, ProcIdx, ShutterIdx};
+use super::shutters;
 
 /// Opcodes of the internal micro vm.
 /// Keep opcode argument length < 6B so it can be send completely
 /// over a standard CAN message.
-#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug, Format)]
 pub enum Opcode {
     /// No operation
     Noop,
@@ -82,6 +85,9 @@ pub enum Opcode {
     /// - DOWN/UP min switch time,
     /// - from close to open on UP time,
     BindShutter(ShutterIdx, OutIdx, OutIdx), // Shutter ID, outputs: DOWN, UP.
+
+    /// A command to a given shutter.
+    ShutterCmd(ShutterIdx, shutters::Cmd),
 
     // Hypothetical?
     /*

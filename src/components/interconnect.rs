@@ -158,7 +158,7 @@ impl Interconnect {
                         }
                         wait_time += 1;
                     }
-                    defmt::error!("Dropping CAN message after waiting {:?}", frame);
+                    defmt::error!("Dropping CAN message after waiting {:?}", raw);
                     status::COUNTERS.can_drop.inc();
                     false
                 }
