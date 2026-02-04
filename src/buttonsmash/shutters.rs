@@ -621,7 +621,7 @@ impl Shutter {
             },
             Cmd::TiltReverse => Position {
                 height: self.position.height,
-                tilt: if self.position.tilt > 0.0 { 0.0 } else { 100.0 },
+                tilt: if self.position.tilt >= 50.0 { 0.0 } else { 100.0 },
             },
             Cmd::Tilt(tilt) => Position {
                 height: self.position.height,
