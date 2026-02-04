@@ -360,7 +360,7 @@ impl Shutter {
             assert!((0.0..=100.0).contains(&final_tilt)); // TODO: Dev time only.
 
             let final_tilt = final_tilt.clamp(0.0, 100.0);
-            (final_tilt, Duration::from_secs(0));
+            (final_tilt, Duration::from_secs(0))
         }
     }
 
@@ -497,6 +497,7 @@ impl Shutter {
             }
             Action::Up(_) => {
                 // We are going UP - to a smaller height values and smaller tilt values.
+                self.action = Action::Up(now);
                 if self.position.height <= self.target.height {
                     // Height achieved! What about the tilt? In UP, the tilt decreases.
                     if self.position.tilt <= self.target.tilt {
@@ -516,6 +517,7 @@ impl Shutter {
             }
             Action::Down(_) => {
                 // We are going DOWN - to a larger height values and larger tilt values.
+                self.action = Action::Down(now);
                 if self.position.height >= self.target.height {
                     // Height achieved! What about the tilt?
                     if self.position.tilt >= self.target.tilt {
@@ -575,10 +577,12 @@ impl Shutter {
         // TODO: Don't stop sending UP signal only to send it in a second?
 
         info!("Shutter command {:?} at state {:?}", cmd, self);
-        // Update state (our current position).
-        self.update(now).await;
-        // Finish previous movement... TODO: Or not? If the direction matches?
-        self.finish(now).await;
+        if self.action != Action::Sleep {
+            // Update state (our current position).
+            self.update(now).await;
+            // Finish previous movement... TODO: Or not? If the direction matches?
+            self.finish(now).await;
+        }
 
         info!("Shutter after finishing previous actions: {:?}", self);
 
