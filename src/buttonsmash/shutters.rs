@@ -273,8 +273,7 @@ impl Config {
     /// How much tilted in given time.
     fn time_as_tilt(&self, elapsed: Duration) -> f32 {
         let tilt = 100.0 * elapsed.as_millis() as f32 / self.tilt_time.as_millis() as f32;
-        let tilt = tilt.clamp(0.0, 100.0);
-        tilt
+        tilt.clamp(0.0, 100.0)
     }
 
     fn time_as_travel(&self, dir: i8, elapsed: Duration) -> f32 {
@@ -381,7 +380,7 @@ impl Shutter {
             }
         };
 
-        let height_delta = dir as f32 * self.cfg.time_as_travel(dir as i8, elapsed);
+        let height_delta = dir as f32 * self.cfg.time_as_travel(dir, elapsed);
 
         let mut height = self.position.height;
         height += height_delta;

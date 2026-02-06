@@ -27,7 +27,7 @@ pub async fn main(spawner: Spawner) {
     defmt::info!("Gate preinit");
 
     // Create board peripherals (early init)
-    let board = BOARD.init(ctrl_board::Board::init(&spawner));
+    let board = BOARD.init(ctrl_board::Board::init());
 
     defmt::info!("Starting gate board");
 

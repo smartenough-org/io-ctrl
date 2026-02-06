@@ -4,7 +4,7 @@ use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_stm32::rtc::{DateTime, DayOfWeek};
 use embassy_stm32::uid;
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Instant, Timer};
 use static_cell::StaticCell;
 
 use crate::boards::ctrl_board::Board;
@@ -63,7 +63,7 @@ impl CtrlApp {
     /// Returns hard-configured Executor. TODO: This is temporary. Code should
     /// be programmable and read from flash on start.
     pub async fn configure(&mut self) {
-        const PROGRAM: [Opcode; 31] = [
+        const PROGRAM: [Opcode; 34] = [
             // Setup proc.
             Opcode::Start(0),
             // Basic usable program for initial setup.
@@ -144,13 +144,20 @@ impl CtrlApp {
         }
 
         let mut cnt = 0;
+        let mut last_tick = Instant::now();
         loop {
             // Prevent deep sleep to allow easy remote debugging.
             // TODO: Remove for production.
-            Timer::after(Duration::from_millis(20)).await;
+            Timer::after(Duration::from_millis(1)).await;
             cnt += 1;
-            if cnt % 300 == 0 {
-                defmt::info!("Tick: {:?}", status::COUNTERS);
+            if cnt == 300 {
+                let now = Instant::now();
+                let passed = (now - last_tick).as_millis();
+                if passed > 10000 {
+                    defmt::info!("Tick: {:?}", status::COUNTERS);
+                    last_tick = now;
+                }
+                cnt = 0;
             }
             // embassy_futures::yield_now().await;
 
