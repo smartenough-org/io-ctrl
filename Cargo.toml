@@ -24,6 +24,9 @@ bus-addr-10 = []
 # east 2nd floor
 bus-addr-11 = []
 
+# Sleep which might prevent debugging.
+deep-sleep = []
+
 [dependencies]
 # Basic set
 embassy-futures = { version = "0.1.2" }

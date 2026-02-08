@@ -145,19 +145,27 @@ impl CtrlApp {
 
         let mut cnt = 0;
         let mut last_tick = Instant::now();
-        loop {
-            // Prevent deep sleep to allow easy remote debugging.
-            // TODO: Remove for production.
-            Timer::after(Duration::from_millis(1)).await;
-            cnt += 1;
-            if cnt == 300 {
-                let now = Instant::now();
-                let passed = (now - last_tick).as_millis();
-                if passed > 10000 {
-                    defmt::info!("Tick: {:?}", status::COUNTERS);
-                    last_tick = now;
+
+        if cfg!(feature = "deep-sleep") {
+            loop {
+                // Prevent deep sleep to allow easy remote debugging.
+                // TODO: Remove for production.
+                Timer::after(Duration::from_secs(10)).await;
+                defmt::info!("Tick: {:?}", status::COUNTERS);
+            }
+        } else {
+            loop {
+                Timer::after(Duration::from_millis(1)).await;
+                cnt += 1;
+                if cnt == 300 {
+                    let now = Instant::now();
+                    let passed = (now - last_tick).as_millis();
+                    if passed > 10000 {
+                        defmt::info!("Tick: {:?}", status::COUNTERS);
+                        last_tick = now;
+                    }
+                    cnt = 0;
                 }
-                cnt = 0;
             }
             // embassy_futures::yield_now().await;
 

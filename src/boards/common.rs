@@ -42,8 +42,11 @@ pub fn config_stm32g4() -> Config {
         // config.rcc.clock_48mhz_src = Some(Clock48MhzSrc::PllQ);
     }
 
-    //config.enable_debug_during_sleep = true;
-    assert!(config.enable_debug_during_sleep);
+    if cfg!(feature = "deep-sleep") {
+        config.enable_debug_during_sleep = false;
+    } else {
+        config.enable_debug_during_sleep = true;
+    }
     config
 }
 
