@@ -1,7 +1,7 @@
 [package]
 edition = "2024"
 name = "io-ctrl"
-version = "0.1.0"
+version = "0.1.5"
 license = "GPL-3.0-or-later"
 default-run = "ctrl"
 default-build = "ctrl"

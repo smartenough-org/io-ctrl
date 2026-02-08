@@ -144,9 +144,25 @@ pub mod args {
                 1 => Some(Self::On),
                 2 => Some(Self::Toggle),
                 _ => {
-                    defmt::warn!("OutputState parsed from invalid arg {}", raw);
+                    defmt::warn!("OutputChangeRequest parsed from invalid arg {}", raw);
                     None
                 }
+            }
+        }
+
+        pub fn from_bool(on: bool) -> Self {
+            if on {
+                Self::On
+            } else {
+                Self::Off
+            }
+        }
+
+        pub fn try_to_bool(&self) -> Option<bool> {
+            match self {
+                Self::Off => Some(false),
+                Self::On => Some(true),
+                Self::Toggle => None,
             }
         }
     }
@@ -479,6 +495,7 @@ impl Message {
                 raw.data[0] = *shutter_idx;
                 cmd.to_raw(&mut raw.data[1..6]);
             }
+
             Message::Status {
                 uptime,
                 errors,
@@ -490,28 +507,58 @@ impl Message {
                 raw.data[4..6].copy_from_slice(&errors.to_le_bytes());
                 raw.data[6..8].copy_from_slice(&warnings.to_le_bytes());
             }
+
+            Message::TimeAnnouncement {
+                year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                day_of_week,
+            } => {
+                raw.msg_type = msg_type::TIME_ANNOUNCEMENT;
+                raw.length = 2 + 1 + 1 + 1 + 1 + 1 + 1;
+                raw.data[0..2].copy_from_slice(&year.to_le_bytes());
+                raw.data[2] = *month;
+                raw.data[3] = *day;
+                raw.data[4] = *hour;
+                raw.data[5] = *minute;
+                raw.data[6] = *second;
+                raw.data[7] = *day_of_week;
+            }
+
             Message::Ping { body } => {
                 raw.msg_type = msg_type::PING;
                 raw.length = 2;
                 raw.data[0..2].copy_from_slice(&body.to_le_bytes());
             }
+
             Message::Pong { body } => {
                 raw.msg_type = msg_type::PONG;
                 raw.length = 2;
                 raw.data[0..2].copy_from_slice(&body.to_le_bytes());
             }
-            /* we only parse those.
-            Message::TimeAnnouncement { year, month, day, hour, minute, second } => todo!(),
-            Message::MicrocodeUpdateInit { addr, length } => todo!(),
-            Message::MicrocodeUpdatePart { offset, chunk } => todo!(),
-            Message::MicrocodeUpdateEnd { chunks, length, crc } => todo!(),
-            Message::MicrocodeUpdateAck { length } => todo!(),
-            */
-            Message::TriggerInput { .. }
-            | Message::RequestStatus
-            | Message::TimeAnnouncement { .. } => {
-                panic!("Not implemented method requested");
+
+            Message::TriggerInput { input, trigger } => {
+                raw.msg_type = msg_type::TRIGGER_INPUT;
+                raw.length = 2;
+                raw.data[0] = *input;
+                raw.data[1] = trigger.to_bytes();
             }
+
+            Message::RequestStatus => {
+                raw.msg_type = msg_type::REQUEST_STATUS;
+                raw.length = 0;
+            }
+
+            /*
+              TODO: Remote bytecode update.
+              Message::MicrocodeUpdateInit { addr, length } => todo!(),
+              Message::MicrocodeUpdatePart { offset, chunk } => todo!(),
+              Message::MicrocodeUpdateEnd { chunks, length, crc } => todo!(),
+              Message::MicrocodeUpdateAck { length } => todo!(),
+             */
         }
         raw
     }

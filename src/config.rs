@@ -9,8 +9,12 @@ pub const MAX_SHUTTERS: usize = 8;
 // TODO: Maybe env!() instead?
 #[cfg(feature = "bus-addr-gate")]
 pub const LOCAL_ADDRESS: u8 = 0;
+
+// First floor: Main box.
 #[cfg(feature = "bus-addr-1")]
 pub const LOCAL_ADDRESS: u8 = 1;
+
+// First floor: Salon, kitchen, dining room box.
 #[cfg(feature = "bus-addr-2")]
 pub const LOCAL_ADDRESS: u8 = 2;
 
@@ -21,3 +25,14 @@ pub const LOCAL_ADDRESS: u8 = 10;
 pub const LOCAL_ADDRESS: u8 = 11;
 
 pub const BROADCAST_ADDRESS: u8 = 0x3f;
+
+/// Module with per-deployment configuration options.
+#[cfg(feature = "bus-addr-1")]
+pub mod board {
+    #[rustfmt::skip]
+    pub const ACTIVE_LOW: [bool; 24] = [
+        true, true, true, true, true, false, true, true,
+        true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true,
+    ];
+}

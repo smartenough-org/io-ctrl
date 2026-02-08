@@ -155,9 +155,7 @@ pub struct TargetPosition {
 
 impl TargetPosition {
     pub fn new(height: u8, tilt: u8) -> Self {
-        Self {
-            height, tilt
-        }
+        Self { height, tilt }
     }
 
     fn as_position(&self) -> Position {
@@ -245,7 +243,7 @@ impl Config {
             down,
             rise_time: Duration::from_millis(57260), // Measured 57.32s
             drop_time: Duration::from_millis(57260), // Measured 57.26
-            tilt_time: Duration::from_millis(1500), // Measured 1.5s.
+            tilt_time: Duration::from_millis(1500),  // Measured 1.5s.
             over_time: Duration::from_secs(2),
         }
     }
@@ -258,7 +256,8 @@ impl Config {
             self.drop_time
         } else {
             self.rise_time
-        }.as_millis() as f32;
+        }
+        .as_millis() as f32;
 
         let diff = (from - to).abs();
         Duration::from_millis((cost * diff / 100.0) as u64)
@@ -295,11 +294,17 @@ impl Position {
     pub fn new(height: u8, tilt: u8) -> Self {
         assert!(height <= 100);
         assert!(tilt <= 100);
-        Self { height: height as f32, tilt: tilt as f32 }
+        Self {
+            height: height as f32,
+            tilt: tilt as f32,
+        }
     }
 
     pub fn new_zero() -> Self {
-        Self { height: 0.0, tilt: 0.0 }
+        Self {
+            height: 0.0,
+            tilt: 0.0,
+        }
     }
 }
 
@@ -620,7 +625,11 @@ impl Shutter {
             },
             Cmd::TiltReverse => Position {
                 height: self.position.height,
-                tilt: if self.position.tilt >= 50.0 { 0.0 } else { 100.0 },
+                tilt: if self.position.tilt >= 50.0 {
+                    0.0
+                } else {
+                    100.0
+                },
             },
             Cmd::Tilt(tilt) => Position {
                 height: self.position.height,
@@ -689,7 +698,10 @@ impl ector::Actor for Manager {
                 min_duration = UPDATE_PERIOD;
             }
             if min_duration != NOOP_UPDATE_PERIOD {
-                defmt::info!("Will wait for {:?}ms and revisit shutters", min_duration.as_millis());
+                defmt::info!(
+                    "Will wait for {:?}ms and revisit shutters",
+                    min_duration.as_millis()
+                );
             }
             let inbox_future = inbox.next();
             let max_time_future = Timer::after(min_duration);

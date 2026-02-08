@@ -12,6 +12,8 @@ pub(crate) struct IndexedOutputs<
     indices: [u8; INDICES_N],
     /// Current known output status (true - high, false - low)
     state: [bool; INDICES_N],
+    /// Which outputs should be low to be active?
+    active_low: [bool; INDICES_N],
     /// IO Expanders (16-bit PCF*)
     grouped: [ET; EXPANDER_N],
     /// Native pins.
@@ -25,10 +27,16 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
     /// Passed indices list maps any numeric ID to each of the PINs.
     //
     // MAYBE: Make indices tuple to index into native-0, or expander ID.
-    pub fn new(grouped: [ET; EN], native: [P; NN], indices: [u8; IN]) -> Self {
+    pub fn new(
+        grouped: [ET; EN],
+        native: [P; NN],
+        indices: [u8; IN],
+        active_low: [bool; IN],
+    ) -> Self {
         IndexedOutputs {
             grouped,
             state: [false; IN],
+            active_low,
             native,
             indices,
         }
@@ -45,12 +53,21 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
         None
     }
 
+    /// Get status of all outputs.
     pub fn get_all(&self) -> [(u8, bool); IN] {
         let mut status = [(0, false); IN];
-        for (i, index) in self.indices.iter().enumerate() {
-            status[i] = (*index, self.state[i]);
+        for (i, io_idx) in self.indices.iter().enumerate() {
+            status[i] = (*io_idx, self.state[i]);
         }
         status
+    }
+
+    /// Set all outputs to stored values (false by default)
+    pub async fn init_outputs(&mut self) -> Result<(), ()> {
+        for (io_idx, high) in self.get_all() {
+            self.set(io_idx, high).await?;
+        }
+        Ok(())
     }
 
     /// Read output state as we set it (doesn't read the PIN state).
@@ -71,13 +88,22 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
     pub async fn set(&mut self, io_idx: IoIdx, high: bool) -> Result<(), ()> {
         if let Some(position) = self.find_id(io_idx) {
             let expander_no = position / 16;
-            if expander_no > self.grouped.len() {
+
+            // Physical output direction.
+            let mut set_as_high = high;
+            if self.active_low[position] {
+                set_as_high = !set_as_high;
+            }
+
+            if expander_no >= self.grouped.len() {
                 // That indexes into native PIN
                 let native_pos = position - (expander_no * 16);
-                if high {
-                    self.native[native_pos].set_high().unwrap();
+                if set_as_high {
+                    self.native[native_pos]
+                        .set_high()
+                        .expect("native pin error");
                 } else {
-                    self.native[native_pos].set_low().unwrap();
+                    self.native[native_pos].set_low().expect("native pin error");
                 }
                 self.state[position] = high;
                 return Ok(());
@@ -88,8 +114,7 @@ impl<const IN: usize, const EN: usize, const NN: usize, ET: GroupedOutputs, P: O
                     defmt::panic!("Calculated IO within expander is invalid");
                 }
                 let io_within = io_within as u8;
-                // TODO: This unwrap will kill program if there's no IO to be set (no PCF)
-                if high {
+                if set_as_high {
                     expander.set_high(io_within).await?
                 } else {
                     expander.set_low(io_within).await?

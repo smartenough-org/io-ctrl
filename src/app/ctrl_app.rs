@@ -69,6 +69,7 @@ impl CtrlApp {
             // Basic usable program for initial setup.
             Opcode::LayerDefault,
             Opcode::BindShortToggle(1, 1),
+            // Opcode::BindShortCall(1, 1), // Testing shutters via procedure 1.
             Opcode::BindShortToggle(2, 2),
             Opcode::BindShortToggle(3, 3),
             Opcode::BindShortToggle(4, 4),
@@ -133,6 +134,10 @@ impl CtrlApp {
             code: args::InfoCode::Started.to_bytes(),
             arg: 0,
         };
+
+        if !self.board.init_outputs().await.is_ok() {
+            defmt::info!("Error while initializing outputs. Expander error?");
+        }
 
         if !self
             .board

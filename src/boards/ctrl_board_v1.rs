@@ -26,6 +26,8 @@ use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, can, i2c, peripherals};
 use static_cell::StaticCell;
 
+use crate::config;
+
 bind_interrupts!(struct CanIrqs {
     FDCAN1_IT0 => can::IT0InterruptHandler<peripherals::FDCAN1>;
     FDCAN1_IT1 => can::IT1InterruptHandler<peripherals::FDCAN1>;
@@ -177,6 +179,7 @@ impl Board {
                 /* Native Pins start here */
                 51, 52, 53, 54, 55, 56, 57, 58,
             ],
+            config::board::ACTIVE_LOW,
         ));
 
         let (rtc, time_provider) = Rtc::new(p.RTC, RtcConfig::default());
@@ -211,13 +214,15 @@ impl Board {
         spawner.spawn(unwrap!(task_expander_inputs(&self.expander_sensors)));
     }
 
+    pub async fn init_outputs(&self) -> Result<(), ()> {
+        self.indexed_outputs.lock().await.init_outputs().await
+    }
+
     pub async fn set_output(&self, idx: IoIdx, state: bool) -> Result<(), ()> {
-        // TODO: Try few times; count errors; panic after some threshold.
         self.indexed_outputs.lock().await.set(idx, state).await
     }
 
     pub async fn toggle_output(&self, idx: IoIdx) -> Result<bool, ()> {
-        // TODO: Try few times; count errors; panic after some threshold.
         self.indexed_outputs.lock().await.toggle(idx).await
     }
 

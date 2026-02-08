@@ -180,7 +180,6 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                     match (*entry).cmp(&MIN_TIME) {
                         core::cmp::Ordering::Equal => {
                             /* Just activated */
-                            defmt::info!("ACTIVATED id{} pos{}", self.id, pos);
                             self.transmit(events::SwitchEvent {
                                 switch_id: self.io_indices[pos],
                                 state: events::SwitchState::Activated,
@@ -199,7 +198,7 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                         _ => {
                             /* Not yet active */
                             defmt::info!(
-                                "active level state id={} idx={} state={}",
+                                "new active level state id={} idx={} state={}",
                                 self.id,
                                 pos,
                                 entry
@@ -210,12 +209,6 @@ impl<BUS: I2c> ExpanderInputs<BUS> {
                     if *entry >= MIN_TIME {
                         /* Was active, now it just got deactivated */
                         let time_active = LOOP_WAIT_MS * (*entry as u32);
-                        defmt::info!(
-                            "DEACTIVATED id{} pos{} after {}ms",
-                            self.id,
-                            pos,
-                            time_active
-                        );
                         self.transmit(events::SwitchEvent {
                             switch_id: self.io_indices[pos],
                             state: events::SwitchState::Deactivated(time_active),

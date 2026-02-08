@@ -88,7 +88,6 @@ pub enum Opcode {
 
     /// A command to a given shutter.
     ShutterCmd(ShutterIdx, shutters::Cmd),
-
     // Hypothetical?
     /*
     /// Read input value (local) into register

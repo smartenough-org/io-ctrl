@@ -428,7 +428,12 @@ impl<const BN: usize> Executor<BN> {
             if let Opcode::Start(proc_idx) = opcode {
                 let current = self.procedures[*proc_idx as usize];
                 if current != 0 && idx != 0 {
-                    defmt::warn!("Duplicate proc {}. Was at {} is also at {}", proc_idx, current, idx);
+                    defmt::warn!(
+                        "Duplicate proc {}. Was at {} is also at {}",
+                        proc_idx,
+                        current,
+                        idx
+                    );
                 }
                 self.procedures[*proc_idx as usize] = idx;
             }
@@ -483,7 +488,7 @@ impl<const BN: usize> Executor<BN> {
                         }
                     }
                 } else {
-                    defmt::info!("Not found binding {:?}!", data);
+                    defmt::info!("No binding for {:?}!", data);
                 }
 
                 // Now, since the local (fast) action is executed, broadcast the
